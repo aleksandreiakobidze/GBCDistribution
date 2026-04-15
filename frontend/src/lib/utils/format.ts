@@ -1,0 +1,34 @@
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
+import { ka } from 'date-fns/locale';
+
+export function formatCurrency(amount: number | string): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return `₾${(isNaN(num) ? 0 : num).toFixed(2)}`;
+}
+
+export function formatDate(dateStr: string, fmt: string = 'MMM dd, yyyy'): string {
+  try {
+    return format(parseISO(dateStr), fmt);
+  } catch {
+    return dateStr;
+  }
+}
+
+export function formatDateTime(dateStr: string): string {
+  return formatDate(dateStr, 'MMM dd, yyyy HH:mm');
+}
+
+export function formatRelative(dateStr: string, locale?: string): string {
+  try {
+    return formatDistanceToNow(parseISO(dateStr), {
+      addSuffix: true,
+      locale: locale === 'ka' ? ka : undefined,
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+export function formatPhone(phone: string): string {
+  return phone;
+}

@@ -1,0 +1,1 @@
+import{T as e}from"./ui-DNN6aRi8.js";var t={getAll:async t=>{let{data:n}=await e.get(`/products`,{params:t}),r=n.data;return{data:r.data??[],meta:r.meta??{current_page:1,last_page:1,per_page:20,total:0}}},getById:async t=>{let{data:n}=await e.get(`/products/${t}`);return n.data},getCategories:async()=>{let{data:t}=await e.get(`/categories`);return t.data}};export{t};

@@ -1,0 +1,111 @@
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useUiStore } from '@/stores/uiStore';
+import { AuthGuard } from './AuthGuard';
+import { AppShell } from '@/components/layout/AppShell';
+import { Spinner } from '@/components/ui';
+
+const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
+const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
+const ProfilePage = lazy(() => import('@/features/auth/pages/ProfilePage'));
+const ProductListPage = lazy(() => import('@/features/products/pages/ProductListPage'));
+const ProductDetailPage = lazy(() => import('@/features/products/pages/ProductDetailPage'));
+const CustomerListPage = lazy(() => import('@/features/customers/pages/CustomerListPage'));
+const CustomerDetailPage = lazy(() => import('@/features/customers/pages/CustomerDetailPage'));
+const CustomerFormPage = lazy(() => import('@/features/customers/pages/CustomerFormPage'));
+const OrderListPage = lazy(() => import('@/features/orders/pages/OrderListPage'));
+const CreateOrderPage = lazy(() => import('@/features/orders/pages/CreateOrderPage'));
+const OrderDetailPage = lazy(() => import('@/features/orders/pages/OrderDetailPage'));
+
+const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPage'));
+const StockMovementPage = lazy(() => import('@/features/inventory/pages/StockMovementPage'));
+const DeliveryListPage = lazy(() => import('@/features/deliveries/pages/DeliveryListPage'));
+const DeliveryDetailPage = lazy(() => import('@/features/deliveries/pages/DeliveryDetailPage'));
+const InvoiceListPage = lazy(() => import('@/features/invoices/pages/InvoiceListPage'));
+const InvoiceDetailPage = lazy(() => import('@/features/invoices/pages/InvoiceDetailPage'));
+const ReturnListPage = lazy(() => import('@/features/returns/pages/ReturnListPage'));
+const CreateReturnPage = lazy(() => import('@/features/returns/pages/CreateReturnPage'));
+const SalesReportPage = lazy(() => import('@/features/reports/pages/SalesReportPage'));
+const InventoryReportPage = lazy(() => import('@/features/reports/pages/InventoryReportPage'));
+const PerformanceReportPage = lazy(() => import('@/features/reports/pages/PerformanceReportPage'));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <Spinner size="lg" />
+    </div>
+  );
+}
+
+function ThemeInit() {
+  const { theme, setTheme } = useUiStore();
+  useEffect(() => {
+    setTheme(theme);
+  }, [theme, setTheme]);
+  return null;
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeInit />
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Public */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Protected */}
+            <Route element={<AuthGuard />}>
+              <Route element={<AppShell />}>
+                <Route index element={<DashboardPage />} />
+
+                <Route path="products" element={<ProductListPage />} />
+                <Route path="products/:id" element={<ProductDetailPage />} />
+
+                <Route path="customers" element={<CustomerListPage />} />
+                <Route path="customers/new" element={<CustomerFormPage />} />
+                <Route path="customers/:id" element={<CustomerDetailPage />} />
+
+                <Route path="orders" element={<OrderListPage />} />
+                <Route path="orders/new" element={<CreateOrderPage />} />
+                <Route path="orders/:id" element={<OrderDetailPage />} />
+
+                <Route path="inventory" element={<InventoryPage />} />
+                <Route path="inventory/movements" element={<StockMovementPage />} />
+
+                <Route path="deliveries" element={<DeliveryListPage />} />
+                <Route path="deliveries/:id" element={<DeliveryDetailPage />} />
+
+                <Route path="invoices" element={<InvoiceListPage />} />
+                <Route path="invoices/:id" element={<InvoiceDetailPage />} />
+
+                <Route path="returns" element={<ReturnListPage />} />
+                <Route path="returns/new" element={<CreateReturnPage />} />
+
+                <Route path="reports" element={<SalesReportPage />} />
+                <Route path="reports/inventory" element={<InventoryReportPage />} />
+                <Route path="reports/performance" element={<PerformanceReportPage />} />
+
+                <Route path="profile" element={<ProfilePage />} />
+              </Route>
+            </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
+}

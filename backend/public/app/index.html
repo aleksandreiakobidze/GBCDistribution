@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BSC Distribution" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>BSC Distribution System</title>
+    <script>
+      // Blocking script: apply persisted theme before first paint to avoid FOUC
+      (function() {
+        try {
+          var raw = localStorage.getItem('bsc-ui');
+          var theme = raw ? JSON.parse(raw).state.theme : 'system';
+          var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', '#0c1222');
+          }
+        } catch(e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-PCIOYsSn.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/ui-DNN6aRi8.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-QFMPRPBF-MZDnbcm3.js">
+    <link rel="modulepreload" crossorigin href="/assets/mutation-B3Pv7L6_.js">
+    <link rel="modulepreload" crossorigin href="/assets/query-Dn1e3Xi5.js">
+    <link rel="modulepreload" crossorigin href="/assets/file-text-mB-HO7YR.js">
+    <link rel="modulepreload" crossorigin href="/assets/ThemeToggle-BA3-2R-n.js">
+    <link rel="modulepreload" crossorigin href="/assets/package-CgnkAj0l.js">
+    <link rel="modulepreload" crossorigin href="/assets/rotate-ccw-DKWeahu5.js">
+    <link rel="modulepreload" crossorigin href="/assets/shopping-cart-uEnnDdYS.js">
+    <link rel="modulepreload" crossorigin href="/assets/truck-DW2g7BlE.js">
+    <link rel="modulepreload" crossorigin href="/assets/user-CuRaU7nI.js">
+    <link rel="modulepreload" crossorigin href="/assets/authStore-BcY2Lpbj.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-yGCCmITq.css">
+  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
