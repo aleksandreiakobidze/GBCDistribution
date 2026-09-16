@@ -7,9 +7,11 @@ interface OrderSummaryProps {
   items: OrderFormItem[];
   onRemoveItem: (index: number) => void;
   onUpdateItem: (index: number, updates: Partial<OrderFormItem>) => void;
+  hideDiscount?: boolean;
+  serverTotal?: string;
 }
 
-export function OrderSummary({ items, onRemoveItem, onUpdateItem }: OrderSummaryProps) {
+export function OrderSummary({ items, onRemoveItem, onUpdateItem, hideDiscount, serverTotal }: OrderSummaryProps) {
   const { t } = useTranslation();
 
   const subtotal = items.reduce(
@@ -93,6 +95,7 @@ export function OrderSummary({ items, onRemoveItem, onUpdateItem }: OrderSummary
                 </button>
               </div>
 
+              {!hideDiscount && (
               <div className="flex items-center gap-0.5">
                 <input
                   type="number"
@@ -111,6 +114,7 @@ export function OrderSummary({ items, onRemoveItem, onUpdateItem }: OrderSummary
                 />
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">%</span>
               </div>
+              )}
 
               <button
                 type="button"
@@ -150,7 +154,7 @@ export function OrderSummary({ items, onRemoveItem, onUpdateItem }: OrderSummary
               {t('common.total', 'Total')}
             </span>
             <span className="font-bold text-[var(--color-primary)]">
-              {formatCurrency(grandTotal)}
+              {formatCurrency(serverTotal ?? grandTotal)}
             </span>
           </div>
         </div>

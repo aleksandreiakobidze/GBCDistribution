@@ -15,6 +15,8 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'role' => $this->role,
+            'id_gvari' => $this->id_gvari,
+            'presellerMapped' => $this->id_gvari !== null,
             'avatar' => $this->avatar,
             'is_active' => $this->is_active,
         ];

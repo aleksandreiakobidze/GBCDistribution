@@ -1,9 +1,15 @@
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { ka } from 'date-fns/locale';
 
-export function formatCurrency(amount: number | string): string {
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') {
+    return '—';
+  }
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return `₾${(isNaN(num) ? 0 : num).toFixed(2)}`;
+  if (isNaN(num)) {
+    return '—';
+  }
+  return `₾${num.toFixed(2)}`;
 }
 
 export function formatDate(dateStr: string, fmt: string = 'MMM dd, yyyy'): string {

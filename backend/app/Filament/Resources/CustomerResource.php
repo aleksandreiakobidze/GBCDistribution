@@ -27,6 +27,16 @@ class CustomerResource extends Resource
 
     protected static string | \UnitEnum | null $navigationGroup = 'Sales';
 
+    public static function canCreate(): bool
+    {
+        return config('erp.provider') === 'fake';
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return config('erp.provider') === 'fake';
+    }
+
     public static function form(Schema $form): Schema
     {
         return $form

@@ -1,21 +1,37 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { productsApi } from '@/lib/api/products.api';
+import { erpApi } from '@/lib/api/erp.api';
 import { Card, Badge, Button, Spinner } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils/format';
 import { ArrowLeft, Package } from 'lucide-react';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [params] = useSearchParams();
+  const customerId = params.get('customerId') ?? '';
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   const { data: product, isLoading } = useQuery({
-    queryKey: ['product', id],
-    queryFn: () => productsApi.getById(Number(id)),
-    enabled: !!id,
+    queryKey: ['erp-item', id, customerId],
+    queryFn: () => erpApi.item(id!, customerId),
+    enabled: !!id && !!customerId,
   });
+
+  if (!customerId) {
+    return (
+      <div className="py-10 text-center text-sm text-[var(--color-text-secondary)]">
+        {t('products.selectCustomerFirst', 'Select a customer to load the authorized assortment and prices.')}
+        <div className="mt-4">
+          <Button variant="ghost" onClick={() => navigate('/products')}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('products.backToProducts', 'Back to Products')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -41,100 +57,30 @@ export default function ProductDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Button
-        variant="ghost"
-        onClick={() => navigate('/products')}
-        className="self-start"
-      >
+      <Button variant="ghost" onClick={() => navigate('/products')} className="self-start">
         <ArrowLeft className="mr-2 h-4 w-4" />
         {t('products.backToProducts', 'Back to Products')}
       </Button>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="flex items-center justify-center lg:col-span-1">
-          <div className="flex h-56 w-full items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/10 to-violet-500/10">
-            {product.image ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="h-full w-full rounded-xl object-cover"
-              />
-            ) : (
-              <Package className="h-20 w-20 text-[var(--color-primary)]/40" />
-            )}
+      <Card className="flex flex-col gap-4 p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">{product.name}</h1>
+            <p className="text-sm text-[var(--color-text-secondary)]">{product.itemId}</p>
           </div>
-        </Card>
-
-        <Card className="flex flex-col gap-5 lg:col-span-2">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--color-text)]">
-                {product.name}
-              </h1>
-              {product.name_ka && (
-                <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
-                  {product.name_ka}
-                </p>
-              )}
-            </div>
-            <Badge
-              variant={product.is_active ? 'success' : 'danger'}
-              size="md"
-            >
-              {product.is_active ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
-            </Badge>
+          <Badge variant={product.active ? 'success' : 'default'}>
+            {product.active ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          <Package className="h-10 w-10 text-[var(--color-primary)]/40" />
+          <div>
+            <p className="text-xs text-[var(--color-text-tertiary)]">{t('products.unit', 'Unit')}: {product.unit}</p>
+            <p className="text-xl font-bold text-[var(--color-primary)]">
+              {product.unitPrice ? formatCurrency(product.unitPrice) : t('products.priceUnavailable', 'Price unavailable')}
+            </p>
           </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <InfoRow label={t('products.sku', 'SKU')} value={product.sku} />
-            <InfoRow
-              label={t('products.barcode', 'Barcode')}
-              value={product.barcode || '—'}
-            />
-            <InfoRow
-              label={t('products.category', 'Category')}
-              value={product.category?.name || '—'}
-            />
-            <InfoRow label={t('products.unit', 'Unit')} value={product.unit} />
-            <InfoRow
-              label={t('common.price', 'Price')}
-              value={formatCurrency(product.price)}
-              highlight
-            />
-            <InfoRow
-              label={t('products.costPrice', 'Cost Price')}
-              value={formatCurrency(product.cost_price)}
-            />
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
-        {label}
-      </span>
-      <span
-        className={
-          highlight
-            ? 'text-lg font-bold text-[var(--color-primary)]'
-            : 'text-sm font-medium text-[var(--color-text)]'
-        }
-      >
-        {value}
-      </span>
+        </div>
+      </Card>
     </div>
   );
 }

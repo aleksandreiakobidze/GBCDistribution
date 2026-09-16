@@ -1,0 +1,10 @@
+# Named tunnel only. Never add SQL Server (1433) as an ingress service.
+# Replace YOUR_TUNNEL_ID and YOUR_APP_HOSTNAME. Do not use geobeer.ge.
+
+tunnel: YOUR_TUNNEL_ID
+credentials-file: C:\ProgramData\cloudflared\YOUR_TUNNEL_ID.json
+
+ingress:
+  - hostname: YOUR_APP_HOSTNAME
+    service: http://127.0.0.1:8080
+  - service: http_status:404

@@ -2,6 +2,8 @@
 
 A full-cycle distribution management PWA for pre-selling operations. Built with Laravel 12 + Filament v5 (backend) and React 19 + Vite (frontend).
 
+Presell catalog, prices and incoming orders are sourced from FMG (Microsoft SQL Server on the office LAN). The public app is reached over HTTPS through a named Cloudflare Tunnel. FMG SQL is never published to the internet.
+
 ## Features
 
 - **Pre-selling Workflow**: Sales reps visit customers, take orders (works offline), orders sync to warehouse
@@ -14,6 +16,8 @@ A full-cycle distribution management PWA for pre-selling operations. Built with 
 - **Multi-language**: English and Georgian (ქართული)
 - **PWA**: Install as native app on any device
 - **Role-based Access**: Admin, Sales Rep, Warehouse Staff, Driver
+- **FMG integration**: Assigned customers, customer-specific list prices, quote-then-submit (writes disabled until FMG mapping is verified)
+- **Remote access**: Phone → HTTPS domain → Cloudflare named tunnel → office Laravel → FMG SQL on LAN
 
 ## Tech Stack
 
@@ -33,7 +37,7 @@ A full-cycle distribution management PWA for pre-selling operations. Built with 
 - Filament v5 (admin panel)
 - Laravel Sanctum (API auth)
 - Spatie Permission (roles)
-- SQLite (development) / MySQL (production)
+- SQLite (application DB) / Microsoft SQL Server (FMG, LAN only)
 
 ## Prerequisites
 
@@ -68,15 +72,17 @@ This creates the database with demo data.
 
 ```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
 ```
 
 ### 4. Start development servers
 
+On this Windows host port 8000 may be blocked; use 8080:
+
 Terminal 1 (Backend):
 ```bash
 cd backend
-php artisan serve
+php artisan serve --host=127.0.0.1 --port=8080
 ```
 
 Terminal 2 (Frontend):
@@ -85,9 +91,14 @@ cd frontend
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000/api
-- Admin Panel: http://localhost:8000/admin
+- Frontend: http://127.0.0.1:5173 (relative `/api` via Vite proxy)
+- Backend API: http://127.0.0.1:8080/api
+- Admin Panel: http://127.0.0.1:8080/admin
+- ERP contract: http://127.0.0.1:8080/api/v1/health
+
+Map each sales user to FMG `IdGvari` in Filament (Users → FMG IdGvari). Unmapped accounts cannot load FMG customers/items.
+
+FMG SQL, writes flag, and Cloudflare tunnel: see `docs/local-run.md`, `docs/fmg-blockers.md`, `docs/cloudflare-tunnel.md`.
 
 ### 5. Demo Login Credentials
 
@@ -103,12 +114,7 @@ npm run dev
 
 Access at `/admin`. Log in with admin@bsc.ge / password.
 
-Features:
-- Full CRUD for all entities
-- Dashboard with KPI widgets and charts
-- Order management with status workflows
-- Inventory monitoring
-- User management with roles
+When `ERP_PROVIDER=fmg`, Filament customer/product create-edit is disabled (FMG owns master data). User → IdGvari mapping remains admin-owned.
 
 ## Building for Production
 
@@ -116,10 +122,12 @@ Features:
 
 ```bash
 cd frontend
-npm run build
+npm run build:spa
 ```
 
-This outputs the built React app to `backend/public/app/`.
+This outputs the built React app to `backend/public/app/` (and copies `/assets` into `backend/public/`). Laravel then serves the SPA at `/` and the API at `/api` (same origin).
+
+Remote users (mobile internet, no VPN) reach that origin through a **named Cloudflare Tunnel** on a **separate** domain (`YOUR_APP_HOSTNAME`). `geobeer.ge` Microsoft 365 DNS/nameservers are not changed. FMG SQL stays on the LAN. See `docs/cloudflare-tunnel.md` and `deploy/cloudflared/config.yml`. Do not publish SQL Server.
 
 ### 2. Configure backend for production
 

@@ -47,6 +47,10 @@ class UserResource extends Resource
                 Select::make('role')
                     ->options(UserRole::class)
                     ->required(),
+                TextInput::make('id_gvari')
+                    ->numeric()
+                    ->label('FMG IdGvari')
+                    ->helperText('Server-side preseller mapping. Leave empty to block FMG access.'),
                 Toggle::make('is_active')
                     ->default(true),
             ]);
@@ -68,6 +72,9 @@ class UserResource extends Resource
                     ->searchable(),
                 TextColumn::make('role')
                     ->badge(),
+                TextColumn::make('id_gvari')
+                    ->label('IdGvari')
+                    ->placeholder('—'),
                 IconColumn::make('is_active')
                     ->boolean(),
                 TextColumn::make('created_at')

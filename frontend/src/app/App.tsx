@@ -17,6 +17,7 @@ const CustomerFormPage = lazy(() => import('@/features/customers/pages/CustomerF
 const OrderListPage = lazy(() => import('@/features/orders/pages/OrderListPage'));
 const CreateOrderPage = lazy(() => import('@/features/orders/pages/CreateOrderPage'));
 const OrderDetailPage = lazy(() => import('@/features/orders/pages/OrderDetailPage'));
+const ErpOrderStatusPage = lazy(() => import('@/features/orders/pages/ErpOrderStatusPage'));
 
 const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPage'));
 const StockMovementPage = lazy(() => import('@/features/inventory/pages/StockMovementPage'));
@@ -80,6 +81,7 @@ export default function App() {
 
                 <Route path="orders" element={<OrderListPage />} />
                 <Route path="orders/new" element={<CreateOrderPage />} />
+                <Route path="orders/erp/:erpOrderId" element={<ErpOrderStatusPage />} />
                 <Route path="orders/:id" element={<OrderDetailPage />} />
 
                 <Route path="inventory" element={<InventoryPage />} />

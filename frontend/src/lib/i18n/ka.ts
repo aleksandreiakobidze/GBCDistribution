@@ -50,6 +50,12 @@ export default {
     orderNotFound: 'შეკვეთა ვერ მოიძებნა',
     deliveryInfo: 'მიწოდების ინფორმაცია', invoiceInfo: 'ინვოისის ინფორმაცია',
     createdAt: 'შექმნილია',
+    priceChanged: 'ფასი შეიცვალა. დაადასტურეთ ახალი შეთავაზება გაგზავნამდე.',
+    indicativePrices: 'ნაჩვენებია სიის ფასები. პრომოები indicative-ია, სანამ FMG წესები არ დადასტურდება.',
+    pricingUnresolved: 'შეკვეთა ვერ გაიგზავნება: FMG ფასის წესი დაუდგენელია.',
+    confirmNewPrice: 'ახალი ფასის დადასტურება',
+    receivedTitle: 'შეკვეთა მიღებულია',
+    receivedHint: 'მიღებული ნიშნავს ჩაწერას FMG incoming ცხრილებში, არა ინვოისს ან posting-ს.',
     status: {
       pending: 'მოლოდინში', confirmed: 'დადასტურებული', picking: 'აკრეფა', packed: 'შეფუთული',
       dispatched: 'გაგზავნილი', delivered: 'მიტანილი', cancelled: 'გაუქმებული',
@@ -68,6 +74,10 @@ export default {
     noCategories: 'კატეგორიები არ არის', searchAddProducts: 'მოძებნეთ პროდუქტი სახელით ან SKU-ით...',
     searchResults: 'ძიების შედეგები', noProductsFound: 'პროდუქტები ვერ მოიძებნა',
     selectCategoryOrSearch: 'აირჩიეთ კატეგორია ან მოძებნეთ პროდუქტები',
+    customerPriceHint: 'ფასები მომხმარებელზეა დამოკიდებული. აირჩიეთ მინიჭებული მომხმარებელი. უცნობი ფასი არასდროს გამოჩნდება 0-ად.',
+    selectCustomerFirst: 'ასორტიმენტისა და ფასების სანახავად აირჩიეთ მომხმარებელი.',
+    priceUnavailable: 'ფასი მიუწვდომელია',
+    catalogError: 'ამ მომხმარებლის კატალოგი მიუწვდომელია.',
   },
   customers: {
     title: 'მომხმარებლები', addCustomer: 'მომხმარებლის დამატება', tier: 'კატეგორია',
@@ -82,6 +92,9 @@ export default {
     createError: 'მომხმარებლის შექმნა ვერ მოხერხდა. სცადეთ ხელახლა.',
     premium: 'პრემიუმ', standard: 'სტანდარტული', basic: 'ბაზისური',
     categoryA: 'კატეგორია A', categoryB: 'კატეგორია B', categoryC: 'კატეგორია C',
+    orgCode: 'კოდი',
+    readOnlyHint: 'მომხმარებლები მოდის FMG-დან. მხოლოდ მინიჭებული ორგანიზაციები. Master data მხოლოდ წასაკითხია.',
+    visitSchedule: 'ვიზიტის გრაფიკი',
   },
   inventory: {
     title: 'ინვენტარი', stockLevel: 'მარაგი', reserved: 'დაჯავშნილი',

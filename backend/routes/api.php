@@ -12,6 +12,12 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\SyncController;
+use App\Http\Controllers\Api\V1\CustomerController as V1CustomerController;
+use App\Http\Controllers\Api\V1\HealthController as V1HealthController;
+use App\Http\Controllers\Api\V1\ItemController as V1ItemController;
+use App\Http\Controllers\Api\V1\MeController as V1MeController;
+use App\Http\Controllers\Api\V1\OrderController as V1OrderController;
+use App\Http\Controllers\Api\V1\PromotionController as V1PromotionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -64,4 +70,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sync/pull', [SyncController::class, 'pull']);
 
     Route::post('/customer-visits', [CustomerVisitController::class, 'store']);
+});
+
+Route::prefix('v1')->group(function () {
+    Route::get('/health', [V1HealthController::class, 'invoke'])->name('v1.health');
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/me', V1MeController::class);
+        Route::get('/health/diagnostics', [V1HealthController::class, 'diagnostics']);
+
+        Route::middleware('preseller')->group(function () {
+            Route::get('/customers', [V1CustomerController::class, 'index']);
+            Route::get('/customers/{customerId}', [V1CustomerController::class, 'show']);
+            Route::get('/items', [V1ItemController::class, 'index']);
+            Route::get('/items/{itemId}', [V1ItemController::class, 'show']);
+            Route::get('/promotions', [V1PromotionController::class, 'index']);
+            Route::post('/orders/quote', [V1OrderController::class, 'quote']);
+            Route::post('/orders', [V1OrderController::class, 'store']);
+            Route::get('/orders/{erpOrderId}/status', [V1OrderController::class, 'status']);
+        });
+    });
 });

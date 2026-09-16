@@ -33,3 +33,8 @@ node_modules/
 
 # Logs
 *.log
+
+# Cloudflare tunnel credentials (never commit tokens)
+**/*cfargotunnel.com.json
+**/cloudflared/*.json
+!deploy/cloudflared/config.yml

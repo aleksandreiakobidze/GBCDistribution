@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node ./scripts/sync-spa-public.mjs",
+    "build:spa": "vite build && node ./scripts/sync-spa-public.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

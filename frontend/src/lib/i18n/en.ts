@@ -50,6 +50,12 @@ export default {
     orderNotFound: 'Order not found',
     deliveryInfo: 'Delivery Information', invoiceInfo: 'Invoice Information',
     createdAt: 'Created',
+    priceChanged: 'Price changed. Confirm the new quote before submitting.',
+    indicativePrices: 'List prices are shown. Promotions are indicative until FMG rules are verified.',
+    pricingUnresolved: 'Order blocked: FMG pricing rule is unresolved.',
+    confirmNewPrice: 'Confirm new price',
+    receivedTitle: 'Order received',
+    receivedHint: 'Received means committed to FMG incoming tables, not invoiced or posted.',
     status: {
       pending: 'Pending', confirmed: 'Confirmed', picking: 'Picking', packed: 'Packed',
       dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled',
@@ -68,6 +74,10 @@ export default {
     noCategories: 'No categories available', searchAddProducts: 'Search products by name or SKU...',
     searchResults: 'Search results', noProductsFound: 'No products found',
     selectCategoryOrSearch: 'Select a category or search to browse products',
+    customerPriceHint: 'Prices are customer-specific. Select an assigned customer. Unknown prices show as unavailable, never zero.',
+    selectCustomerFirst: 'Select a customer to load the authorized assortment and prices.',
+    priceUnavailable: 'Price unavailable',
+    catalogError: 'Catalog is unavailable for this customer.',
   },
   customers: {
     title: 'Customers', addCustomer: 'Add Customer', tier: 'Tier',
@@ -82,6 +92,9 @@ export default {
     createError: 'Failed to create customer. Please try again.',
     premium: 'Premium', standard: 'Standard', basic: 'Basic',
     categoryA: 'Category A', categoryB: 'Category B', categoryC: 'Category C',
+    orgCode: 'Code',
+    readOnlyHint: 'Customers come from FMG. Assigned organizations only. Master data is read-only.',
+    visitSchedule: 'Visit schedule',
   },
   inventory: {
     title: 'Inventory', stockLevel: 'Stock Level', reserved: 'Reserved',

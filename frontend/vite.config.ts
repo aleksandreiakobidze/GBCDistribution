@@ -55,6 +55,13 @@ export default defineConfig({
             },
           },
           {
+            urlPattern: /^https?:\/\/.*\/api\/v1\/.*/,
+            handler: 'NetworkOnly',
+            options: {
+              cacheName: 'erp-api-no-cache',
+            },
+          },
+          {
             urlPattern: /^https?:\/\/.*\/api\/.*/,
             handler: 'NetworkFirst',
             options: {
@@ -80,7 +87,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

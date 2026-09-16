@@ -6,6 +6,8 @@ export interface User {
   role: 'admin' | 'sales_rep' | 'warehouse' | 'driver';
   avatar: string | null;
   is_active: boolean;
+  id_gvari?: number | null;
+  presellerMapped?: boolean;
 }
 
 export interface Category {
@@ -222,11 +224,108 @@ export interface OrderFormItem {
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  itemId?: string;
 }
 
 export interface LoginCredentials {
   email: string;
   password: string;
+}
+
+export interface ErpVisitSchedule {
+  mon: boolean;
+  tue: boolean;
+  wed: boolean;
+  thu: boolean;
+  fri: boolean;
+  sat: boolean;
+  sun: boolean;
+  monNum: number;
+  tueNum: number;
+  wedNum: number;
+  thuNum: number;
+  friNum: number;
+  satNum: number;
+  sunNum: number;
+}
+
+export interface ErpCustomer {
+  customerId: string;
+  name: string;
+  orgCode: string | null;
+  address: string | null;
+  phone: string | null;
+  city: string | null;
+  priceGroup: number;
+  latitude: string | null;
+  longitude: string | null;
+  useProdList: boolean;
+  active: boolean;
+  schedule?: ErpVisitSchedule | null;
+}
+
+export interface ErpItem {
+  itemId: string;
+  name: string;
+  unit: string;
+  unitName: string | null;
+  prodCode: string | null;
+  category: string | null;
+  unitPrice: string | null;
+  priceState: string | null;
+  priceError: string | null;
+  active: boolean;
+  compRaod: string | null;
+}
+
+export interface ErpCursorPage<T> {
+  items: T[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface ErpQuoteLine {
+  itemId: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+}
+
+export interface ErpQuote {
+  quoteId: string;
+  customerId: string;
+  lines: ErpQuoteLine[];
+  subtotal: string;
+  total: string;
+  priceState: 'computed' | 'indicative';
+  unresolvedRules: string[];
+  promotions: Array<{ id: string; name: string; state: string; reason?: string }>;
+  expiresAt: string;
+}
+
+export interface ErpOrderReceipt {
+  externalId: string;
+  erpOrderId: string;
+  status: string;
+  message: string;
+}
+
+export interface ErpCartItem {
+  itemId: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string | null;
+}
+
+export interface ApiErrorBody {
+  success: false;
+  code?: string;
+  message: string;
+  correlationId?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface SyncQueueItem {

@@ -24,6 +24,7 @@ class User extends Authenticatable implements HasAvatar
         'password',
         'phone',
         'role',
+        'id_gvari',
         'avatar',
         'is_active',
     ];
@@ -39,6 +40,7 @@ class User extends Authenticatable implements HasAvatar
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'id_gvari' => 'integer',
             'is_active' => 'boolean',
         ];
     }

@@ -114,6 +114,25 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        /*
+         * FMG Microsoft SQL Server (LAN only). Never expose this port via Cloudflare.
+         * Do not invent host/database/credentials; leave placeholders empty until configured.
+         */
+        'fmg' => [
+            'driver' => 'sqlsrv',
+            'host' => env('FMG_SQL_SERVER'),
+            'port' => env('FMG_SQL_PORT', '1433'),
+            'database' => env('FMG_SQL_DATABASE'),
+            'username' => env('FMG_SQL_USERNAME'),
+            'password' => env('FMG_SQL_PASSWORD'),
+            'charset' => env('FMG_SQL_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('FMG_SQL_ENCRYPT', 'yes'),
+            'trust_server_certificate' => filter_var(env('FMG_SQL_TRUST_SERVER_CERTIFICATE', false), FILTER_VALIDATE_BOOLEAN),
+            'login_timeout' => (int) env('FMG_SQL_LOGIN_TIMEOUT', 5),
+        ],
+
     ],
 
     /*
