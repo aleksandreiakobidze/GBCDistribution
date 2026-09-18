@@ -1,0 +1,137 @@
+openapi: 3.0.3
+info:
+  title: BSC Distribution ERP API
+  version: "1.0.0"
+  description: Provider-neutral contract. FMG adapter is active. Writes to OnlineReal1/2 stay disabled until mapping is verified.
+servers:
+  - url: /api
+paths:
+  /v1/health:
+    get:
+      summary: Liveness
+      responses:
+        "200":
+          description: OK
+  /v1/me:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Current user and preseller mapping (no secrets)
+      responses:
+        "200":
+          description: OK
+  /v1/customers:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100, maximum: 500 }
+      responses:
+        "200": { description: Assigned customers }
+        "403": { description: Unmapped preseller }
+  /v1/customers/{customerId}:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: customerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Authorized customer }
+        "404": { description: Not found in scope }
+  /v1/items:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: customerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Customer assortment and list prices }
+  /v1/promotions:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: customerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Indicative promotions }
+  /v1/orders/quote:
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, lines]
+              properties:
+                customerId: { type: string, example: "12345" }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    required: [itemId, quantity]
+                    properties:
+                      itemId: { type: string, example: "ITEM-001" }
+                      quantity: { type: string, example: "12.0000" }
+      responses:
+        "200": { description: Server quote }
+  /v1/orders:
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalId, customerId, quoteId, lines]
+              properties:
+                externalId: { type: string, format: uuid }
+                customerId: { type: string }
+                quoteId: { type: string, format: uuid }
+                note: { type: string, maxLength: 300 }
+                location:
+                  type: object
+                  properties:
+                    latitude: { type: string }
+                    longitude: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    required: [itemId, quantity]
+                    properties:
+                      itemId: { type: string }
+                      quantity: { type: string }
+      responses:
+        "201": { description: received (not posted) }
+        "409": { description: PRICE_CHANGED or IDEMPOTENCY_CONFLICT }
+        "503": { description: WRITES_DISABLED }
+  /v1/orders/{erpOrderId}/status:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: erpOrderId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: received vs unavailable processing status }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

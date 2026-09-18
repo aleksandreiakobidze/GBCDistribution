@@ -1,0 +1,1 @@
+function e(e){let t=parseFloat(e??`1`);return Number.isFinite(t)&&t>0?t:1}function t(t,n){return(Number.isFinite(t)?t:0)*e(n)}function n(e){if(!Number.isFinite(e))return`0`;let t=Math.round(e*2)/2;return Number.isInteger(t)?String(t):t.toFixed(1)}function r(e,t){return e===!0&&t===!0}function i(e){return e?.5:1}export{t as a,i,n,e as r,r as t};

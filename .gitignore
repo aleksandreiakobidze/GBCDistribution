@@ -1,0 +1,47 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+/backend/vendor/
+
+# Build
+/frontend/dist/
+
+# Laravel
+/backend/storage/*.key
+/backend/storage/pail
+/backend/public/build
+/backend/public/hot
+/backend/public/storage
+
+# Database
+*.sqlite
+*.sqlite-journal
+
+# Logs
+*.log
+
+# Cloudflare tunnel credentials (never commit tokens)
+**/*cfargotunnel.com.json
+**/cloudflared/*.json
+!deploy/cloudflared/config.yml
+
+# mkcert / Caddy TLS material (never commit private keys)
+deploy/caddy/certs/*.pem
+deploy/caddy/certs/*.key
+!deploy/caddy/certs/.gitkeep
+deploy/caddy/logs/

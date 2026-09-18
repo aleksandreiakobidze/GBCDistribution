@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DWSWI4JT.js";import{i as t}from"./chunk-QFMPRPBF-BJUUsqpL.js";import{t as n}from"./authStore-ZWQgKm4p.js";import{t as r}from"./CustomerRouteBoard-pAQtZfG3.js";var i=e();function a(){return n(e=>e.user?.role)===`sales_rep`?(0,i.jsx)(t,{to:`/customers`,replace:!0}):(0,i.jsx)(r,{teamMode:!0})}export{a as default};

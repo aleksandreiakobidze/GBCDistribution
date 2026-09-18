@@ -1,0 +1,13 @@
+# Office origin TLS terminator for LAN and VPN.
+# Laravel stays on loopback. Do not proxy SQL Server 1433.
+# Cloudflare named tunnel is deferred; leave deploy/cloudflared unused.
+
+{
+	auto_https off
+}
+
+gbc.office.local {
+	tls ./certs/gbc.office.local.pem ./certs/gbc.office.local-key.pem
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}

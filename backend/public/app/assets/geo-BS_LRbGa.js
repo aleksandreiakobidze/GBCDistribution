@@ -1,0 +1,1 @@
+function e(e,t){if(e==null||t==null||e===``||t===``)return!1;let n=Number(e),r=Number(t);return!Number.isFinite(n)||!Number.isFinite(r)?!1:n!==0&&r!==0}function t(e,t){return[Number(e),Number(t)]}export{t as n,e as t};
