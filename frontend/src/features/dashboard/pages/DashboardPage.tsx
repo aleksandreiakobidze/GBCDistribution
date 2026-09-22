@@ -74,10 +74,6 @@ function SupervisorDashboard() {
   );
 }
 
-function countLabel(count: number, hasMore?: boolean): string {
-  return hasMore ? `${count}+` : String(count);
-}
-
 function SalesDashboard() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
@@ -111,8 +107,8 @@ function SalesDashboard() {
   });
 
   const todayItems = todayQuery.data?.items ?? [];
-  const todayCount = todayItems.length;
-  const assignedCount = allQuery.data?.items.length ?? 0;
+  const todayCount = todayQuery.data?.todayTotal ?? todayItems.length;
+  const assignedCount = todayQuery.data?.allTotal ?? allQuery.data?.allTotal ?? allQuery.data?.items.length ?? 0;
   const pinCount = todayItems.filter((row) => isPlottableCoord(row.latitude, row.longitude)).length;
   const notOnToday = Math.max(0, assignedCount - todayCount);
   const compareError = todayQuery.isError || allQuery.isError;
@@ -141,14 +137,14 @@ function SalesDashboard() {
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiCard
           title={t('dashboard.todayVisits', 'Today visits')}
-          value={todayQuery.isError ? '—' : countLabel(todayItems.length, todayQuery.data?.hasMore)}
+          value={todayQuery.isError ? '—' : String(todayCount)}
           icon={Route}
           color="blue"
           loading={todayQuery.isLoading}
         />
         <KpiCard
           title={t('dashboard.assignedCustomers', 'Assigned customers')}
-          value={allQuery.isError ? '—' : countLabel(allQuery.data?.items.length ?? 0, allQuery.data?.hasMore)}
+          value={todayQuery.isError && allQuery.isError ? '—' : String(assignedCount)}
           icon={Users}
           color="teal"
           loading={allQuery.isLoading}
@@ -175,7 +171,7 @@ function SalesDashboard() {
           icon={Route}
           color="blue"
           loading={todayQuery.isLoading || allQuery.isLoading}
-          compare={compareError ? undefined : { current: todayCount, total: assignedCount, totalHasMore: allQuery.data?.hasMore }}
+          compare={compareError ? undefined : { current: todayCount, total: assignedCount }}
           value={compareError ? '—' : undefined}
           hint={scheduleHint}
         />
@@ -184,7 +180,7 @@ function SalesDashboard() {
           icon={MapPin}
           color="amber"
           loading={todayQuery.isLoading}
-          compare={todayQuery.isError ? undefined : { current: pinCount, total: todayCount, totalHasMore: todayQuery.data?.hasMore }}
+          compare={todayQuery.isError ? undefined : { current: pinCount, total: todayCount }}
           value={todayQuery.isError ? '—' : undefined}
           hint={scheduleHint}
         />
@@ -193,7 +189,7 @@ function SalesDashboard() {
           icon={CalendarOff}
           color="teal"
           loading={todayQuery.isLoading || allQuery.isLoading}
-          compare={compareError ? undefined : { current: notOnToday, total: assignedCount, totalHasMore: allQuery.data?.hasMore }}
+          compare={compareError ? undefined : { current: notOnToday, total: assignedCount }}
           value={compareError ? '—' : undefined}
           hint={scheduleHint}
         />

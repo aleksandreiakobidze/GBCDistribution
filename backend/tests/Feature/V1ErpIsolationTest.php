@@ -788,6 +788,30 @@ class V1ErpIsolationTest extends TestCase
         $this->assertSame('36.0000', $quote['total']);
     }
 
+    public function test_quote_reports_customer_order_limits(): void
+    {
+        FakeErpState::$customers[0]['MinReal'] = 250;
+        FakeErpState::$customers[0]['MaxReal'] = 1150;
+        Sanctum::actingAs($this->preseller(11));
+
+        $limited = $this->postJson('/api/v1/orders/quote', [
+            'customerId' => '1001',
+            'lines' => [['itemId' => '0001', 'quantity' => '2']],
+        ])->assertOk()->json('data');
+
+        $this->assertSame('250.00', $limited['orderLimits']['minTotal']);
+        $this->assertSame('1150.00', $limited['orderLimits']['maxTotal']);
+        $this->assertSame('3.0000', $limited['total']);
+
+        $unlimited = $this->postJson('/api/v1/orders/quote', [
+            'customerId' => '1002',
+            'lines' => [['itemId' => '0001', 'quantity' => '2']],
+        ])->assertOk()->json('data');
+
+        $this->assertNull($unlimited['orderLimits']['minTotal']);
+        $this->assertNull($unlimited['orderLimits']['maxTotal']);
+    }
+
     public function test_half_pack_allowed_when_org_and_product_flags_are_on(): void
     {
         FakeErpState::$products[0]['CompRaod'] = '24.0000';
@@ -842,6 +866,28 @@ class V1ErpIsolationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.compRaod', '24.0000')
             ->assertJsonPath('data.canRealHalfComp', true);
+    }
+
+    public function test_customer_list_totals_keep_today_within_all(): void
+    {
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-16 12:00:00', 'Asia/Tbilisi'));
+
+        try {
+            Sanctum::actingAs($this->preseller(11));
+            $page = $this->getJson('/api/v1/customers?day=all')->assertOk()->json('data');
+
+            $this->assertSame(3, $page['allTotal']);
+            $this->assertSame(2, $page['todayTotal']);
+            $this->assertLessThanOrEqual($page['allTotal'], $page['todayTotal']);
+            $this->assertEqualsCanonicalizing(['1001', '1002', '3001'], collect($page['items'])->pluck('customerId')->all());
+
+            $today = $this->getJson('/api/v1/customers?day=today')->assertOk()->json('data');
+            $this->assertSame(3, $today['allTotal']);
+            $this->assertSame(2, $today['todayTotal']);
+            $this->assertEqualsCanonicalizing(['1001', '1002'], collect($today['items'])->pluck('customerId')->all());
+        } finally {
+            \Carbon\Carbon::setTestNow();
+        }
     }
 
     public function test_today_filter_uses_tbilisi_weekday_and_skips_zero_coords(): void

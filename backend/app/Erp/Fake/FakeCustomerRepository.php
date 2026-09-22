@@ -8,6 +8,7 @@ use App\Erp\Dto\KegPocketRecord;
 use App\Erp\Dto\PageResult;
 use App\Erp\Dto\VisitSchedule;
 use App\Erp\Exceptions\ErpException;
+use App\Erp\Support\OrderLimit;
 use App\Erp\Support\VisitDay;
 
 final class FakeCustomerRepository implements CustomerRepository
@@ -18,9 +19,10 @@ final class FakeCustomerRepository implements CustomerRepository
 
         $day = VisitDay::normalize($day);
         $ids = $this->assignedIds($idGvari);
-        $rows = array_values(array_filter(
+        $flag = VisitDay::fmgFlag();
+        $matched = array_values(array_filter(
             FakeErpState::$customers,
-            function (array $c) use ($ids, $search, $day) {
+            function (array $c) use ($ids, $search) {
                 if (! in_array((string) $c['IdOrg'], $ids, true)) {
                     return false;
                 }
@@ -38,16 +40,17 @@ final class FakeCustomerRepository implements CustomerRepository
                         return false;
                     }
                 }
-                if ($day === 'today') {
-                    $flag = VisitDay::fmgFlag();
-                    if (! VisitDay::visitsOnArray($c['schedule'] ?? [], $flag)) {
-                        return false;
-                    }
-                }
 
                 return true;
             }
         ));
+        $allTotal = count($matched);
+        $todayRows = array_values(array_filter(
+            $matched,
+            fn (array $c) => VisitDay::visitsOnArray($c['schedule'] ?? [], $flag),
+        ));
+        $todayTotal = count($todayRows);
+        $rows = $day === 'today' ? $todayRows : $matched;
 
         if ($day === 'today') {
             $flag = VisitDay::fmgFlag();
@@ -79,6 +82,8 @@ final class FakeCustomerRepository implements CustomerRepository
             array_map(fn ($r) => $this->map($r), $slice),
             $hasMore,
             $next,
+            $todayTotal,
+            $allTotal,
         );
     }
 
@@ -200,6 +205,8 @@ final class FakeCustomerRepository implements CustomerRepository
                 ? (string) $row['Tanxa']
                 : null,
             canRealHalfComp: (bool) ($row['CanRealHalfComp'] ?? false),
+            minOrderTotal: OrderLimit::normalize($row['MinReal'] ?? null),
+            maxOrderTotal: OrderLimit::normalize($row['MaxReal'] ?? null),
         );
     }
 }

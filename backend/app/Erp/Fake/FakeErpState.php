@@ -195,6 +195,8 @@ final class FakeErpState
             'UseProdList' => $useProdList,
             'OrgShowPocket' => true,
             'CanRealHalfComp' => true,
+            'MinReal' => 0,
+            'MaxReal' => 0,
             'Active' => true,
             'schedule' => self::days(
                 ['MON' => true, 'TUE' => true, 'WED' => true, 'THU' => true, 'FRI' => true],

@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { erpApi } from '@/lib/api/erp.api';
 import { Card, Badge, Button, Spinner } from '@/components/ui';
 import { ErpErrorAlert } from '@/components/shared';
-import { ArrowLeft, Banknote, MapPin, Package, Percent, Phone, Plus, RotateCcw, TriangleAlert } from 'lucide-react';
-import { isPlottableCoord } from '@/lib/utils/geo';
+import { ArrowLeft, Banknote, MapPin, Navigation, Package, Percent, Phone, Plus, RotateCcw, TriangleAlert } from 'lucide-react';
+import { googleMapsDirectionsUrl, isPlottableCoord } from '@/lib/utils/geo';
 import { formatCurrency } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { CustomerMap } from '../components/CustomerMap';
@@ -181,20 +181,36 @@ export default function CustomerDetailPage() {
           </div>
 
           {isPlottableCoord(customer.latitude, customer.longitude) ? (
-            <div className="-mx-4 mt-3 sm:-mx-5">
-              <CustomerMap
-                pins={[
-                  {
-                    id: customer.customerId,
-                    name: customer.name,
-                    latitude: customer.latitude,
-                    longitude: customer.longitude,
-                  },
-                ]}
-                heightClass="h-40 rounded-none border-x-0 border-b-0 sm:h-52"
-                selectedId={customer.customerId}
-              />
-            </div>
+            <>
+              <div className="-mx-4 mt-3 sm:-mx-5">
+                <CustomerMap
+                  pins={[
+                    {
+                      id: customer.customerId,
+                      name: customer.name,
+                      latitude: customer.latitude,
+                      longitude: customer.longitude,
+                    },
+                  ]}
+                  heightClass="h-40 rounded-none border-x-0 border-b-0 sm:h-52"
+                  selectedId={customer.customerId}
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="mt-3"
+                onClick={() => {
+                  window.open(
+                    googleMapsDirectionsUrl(customer.latitude as string, customer.longitude as string),
+                    '_blank',
+                    'noopener,noreferrer',
+                  );
+                }}
+              >
+                <Navigation className="h-4 w-4" />
+                {t('customers.getDirections', 'Get directions')}
+              </Button>
+            </>
           ) : null}
 
           {hasBalance || kegs.length > 0 ? (

@@ -1,0 +1,1 @@
+import{D as e}from"./ui-CZjRMIxm.js";var t={login:async t=>{let{data:n}=await e.post(`/auth/login`,t);return n.data},logout:async()=>{await e.post(`/auth/logout`)},getUser:async()=>{let{data:t}=await e.get(`/auth/user`);return t.data}};export{t};

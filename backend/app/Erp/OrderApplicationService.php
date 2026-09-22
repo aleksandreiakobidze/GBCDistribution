@@ -46,6 +46,10 @@ final class OrderApplicationService
         return array_merge($priced, [
             'quoteId' => $quoteId,
             'customerId' => $customerId,
+            'orderLimits' => [
+                'minTotal' => $customer->minOrderTotal,
+                'maxTotal' => $customer->maxOrderTotal,
+            ],
             'expiresAt' => now()->addMinutes($ttl)->toIso8601String(),
         ]);
     }

@@ -41,7 +41,7 @@ class UserSeeder extends Seeder
                 'phone' => '+995 555 200 200',
                 'role' => UserRole::SalesRep,
                 'spatie_role' => 'sales_rep',
-                'id_gvari' => 4339, // provided: FMG IdGvari for Nino
+                'id_gvari' => 4322, // FMG IdGvari for Nino
                 'supervisor_id' => $supervisor->id,
             ],
             [

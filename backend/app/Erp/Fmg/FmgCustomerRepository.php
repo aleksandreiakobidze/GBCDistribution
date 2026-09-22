@@ -9,6 +9,7 @@ use App\Erp\Dto\PageResult;
 use App\Erp\Dto\VisitSchedule;
 use App\Erp\Exceptions\ErpException;
 use App\Erp\Support\Decimal;
+use App\Erp\Support\OrderLimit;
 use App\Erp\Support\VisitDay;
 
 final class FmgCustomerRepository implements CustomerRepository
@@ -25,13 +26,12 @@ final class FmgCustomerRepository implements CustomerRepository
         $limitPlus = max(1, min($limit + 1, 501));
         $text = $this->orgTextColumns();
         $scheduleCols = $this->scheduleColumns();
-        $sql = <<<SQL
-SELECT TOP {$limitPlus}
-    o.IdOrg, {$text},
-    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory,
-    o.Lat, o.Lon, o.UseProdList, o.OrgShowPocket, o.Active,
-    ot.CanRealHalfComp,
-    {$scheduleCols}
+        $flag = VisitDay::fmgFlag();
+        if (! in_array($flag, VisitDay::FLAGS, true)) {
+            throw new ErpException('INVALID_DAY', 'ვიზიტის დღე არასწორია.', 422);
+        }
+        $num = $flag.'Num';
+        $from = <<<SQL
 FROM dbo.OrgView AS o
 CROSS APPLY (
     SELECT TOP 1
@@ -53,25 +53,11 @@ SQL;
         $bindings = [
             'idGvari' => $idGvari,
         ];
-
-        if ($day === 'today') {
-            $flag = VisitDay::fmgFlag();
-            if (! in_array($flag, VisitDay::FLAGS, true)) {
-                throw new ErpException('INVALID_DAY', 'ვიზიტის დღე არასწორია.', 422);
-            }
-            $num = $flag.'Num';
-            $sql .= " AND og.{$flag} = 1";
-            $cursor = null;
-        }
-
-        if ($cursor) {
-            $sql .= ' AND o.IdOrg > :cursor';
-            $bindings['cursor'] = (int) $cursor;
-        }
+        $searchSql = '';
 
         if ($search !== null && trim($search) !== '') {
             $term = trim($search);
-            $sql .= ' AND ('
+            $searchSql = ' AND ('
                 .FmgNvarchar::likeContains('o.Org', $term)
                 .' OR '.FmgNvarchar::likeContains('o.OrgCode', $term)
                 .' OR '.FmgNvarchar::likeContains('o.City', $term)
@@ -80,14 +66,45 @@ SQL;
             $bindings['searchId'] = '%'.$term.'%';
         }
 
+        $todaySql = " AND og.{$flag} = 1";
         if ($day === 'today') {
-            $sql .= " ORDER BY CASE WHEN og.{$num} > 0 THEN 0 ELSE 1 END, og.{$num}, o.IdOrg";
+            $cursor = null;
+        }
+
+        $pageSql = "SELECT TOP {$limitPlus}
+    o.IdOrg, {$text},
+    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory,
+    o.Lat, o.Lon, o.UseProdList, o.OrgShowPocket, o.Active,
+    ot.CanRealHalfComp,
+    {$scheduleCols}
+{$from}{$searchSql}";
+        $pageBindings = $bindings;
+
+        if ($day === 'today') {
+            $pageSql .= $todaySql;
+        }
+
+        if ($cursor) {
+            $pageSql .= ' AND o.IdOrg > :cursor';
+            $pageBindings['cursor'] = (int) $cursor;
+        }
+
+        if ($day === 'today') {
+            $pageSql .= " ORDER BY CASE WHEN og.{$num} > 0 THEN 0 ELSE 1 END, og.{$num}, o.IdOrg";
         } else {
-            $sql .= ' ORDER BY o.IdOrg';
+            $pageSql .= ' ORDER BY o.IdOrg';
         }
 
         try {
-            $rows = $this->fmg->connection()->select($sql, $bindings);
+            $allTotal = (int) ($this->fmg->connection()->select(
+                "SELECT COUNT(*) AS c {$from}{$searchSql}",
+                $bindings,
+            )[0]->c ?? 0);
+            $todayTotal = (int) ($this->fmg->connection()->select(
+                "SELECT COUNT(*) AS c {$from}{$searchSql}{$todaySql}",
+                $bindings,
+            )[0]->c ?? 0);
+            $rows = $this->fmg->connection()->select($pageSql, $pageBindings);
         } catch (\Throwable) {
             throw new ErpException('SOURCE_UNAVAILABLE', 'FMG ბაზა ამჟამად მიუწვდომელია.', 503);
         }
@@ -102,7 +119,7 @@ SQL;
             ? $items[array_key_last($items)]->customerId
             : null;
 
-        return new PageResult($items, $hasMore, $next);
+        return new PageResult($items, $hasMore, $next, $todayTotal, $allTotal);
     }
 
     public function getAuthorized(int $idGvari, string $customerId): CustomerRecord
@@ -117,6 +134,7 @@ SELECT
     o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory,
     o.Lat, o.Lon, o.UseProdList, o.OrgShowPocket, o.Active,
     ot.CanRealHalfComp,
+    svb.MinReal, svb.MaxReal,
     {$scheduleCols}
 FROM dbo.OrgView AS o
 CROSS APPLY (
@@ -132,6 +150,11 @@ OUTER APPLY (
     FROM dbo.OrgTView AS ot
     WHERE ot.IdOrgT = o.IdOrgT
 ) AS ot
+OUTER APPLY (
+    SELECT TOP 1 svb.MinReal, svb.MaxReal
+    FROM dbo.SagadValiBlockView AS svb
+    WHERE svb.Sagad = o.Sagad
+) AS svb
 WHERE o.IdOrg = :idOrg
 SQL;
 
@@ -257,6 +280,8 @@ SQL;
             kegs: $kegs,
             balance: $balance,
             canRealHalfComp: $this->isActive($row['CanRealHalfComp'] ?? false),
+            minOrderTotal: OrderLimit::normalize($row['MinReal'] ?? null),
+            maxOrderTotal: OrderLimit::normalize($row['MaxReal'] ?? null),
         );
     }
 

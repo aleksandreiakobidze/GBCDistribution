@@ -1,3 +1,4 @@
+import axios from 'axios';
 import apiClient from './client';
 import type {
   ErpCursorPage,
@@ -15,6 +16,22 @@ import type {
 
 function unwrap<T>(payload: { data: T }): T {
   return payload.data;
+}
+
+/**
+ * Binary responses deliver the JSON error envelope as an ArrayBuffer, which the
+ * shared error reader cannot inspect. Decode it back into an object in place.
+ */
+function decodeArrayBufferError(error: unknown): unknown {
+  if (!axios.isAxiosError(error) || !(error.response?.data instanceof ArrayBuffer)) {
+    return error;
+  }
+  try {
+    error.response.data = JSON.parse(new TextDecoder().decode(error.response.data));
+  } catch {
+    error.response.data = undefined;
+  }
+  return error;
 }
 
 export const erpApi = {
@@ -204,5 +221,27 @@ export const erpApi = {
   ) => {
     const { data } = await apiClient.patch(`/v1/product-returns/${id}`, payload);
     return unwrap(data) as ErpProductReturn;
+  },
+
+  priceList: async () => {
+    const { data } = await apiClient.get('/v1/price-list');
+    return unwrap(data) as {
+      available: boolean;
+      filename: string | null;
+      sizeBytes: number | null;
+      updatedAt: string | null;
+    };
+  },
+
+  priceListFile: async () => {
+    try {
+      const { data } = await apiClient.get<ArrayBuffer>('/v1/price-list/file', {
+        responseType: 'arraybuffer',
+        headers: { Accept: 'application/pdf' },
+      });
+      return data;
+    } catch (error) {
+      throw decodeArrayBufferError(error);
+    }
   },
 };

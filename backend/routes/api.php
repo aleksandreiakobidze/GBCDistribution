@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\CollectionController as V1CollectionController;
 use App\Http\Controllers\Api\V1\ProductReturnController as V1ProductReturnController;
 use App\Http\Controllers\Api\V1\SavedOrderController as V1SavedOrderController;
 use App\Http\Controllers\Api\V1\PromotionController as V1PromotionController;
+use App\Http\Controllers\Api\V1\PriceListController as V1PriceListController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -85,6 +86,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', V1MeController::class);
         Route::get('/team-reps', V1TeamRepController::class);
         Route::get('/health/diagnostics', [V1HealthController::class, 'diagnostics']);
+        Route::get('/price-list', [V1PriceListController::class, 'meta']);
+        Route::get('/price-list/file', [V1PriceListController::class, 'file']);
 
         Route::middleware('preseller')->group(function () {
             Route::get('/customers', [V1CustomerController::class, 'index']);

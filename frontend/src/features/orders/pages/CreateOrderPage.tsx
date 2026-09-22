@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +31,28 @@ function erpErrorMessage(error: unknown, fallback: string): string {
   return erpErrorFromUnknown(error, fallback).message;
 }
 
+type OrderLimits = NonNullable<ErpQuote['orderLimits']>;
+
+type QuoteLinesInput = Array<{ itemId: string; quantity: string }>;
+
+const REQUOTE_DEBOUNCE_MS = 450;
+
+function limitBreach(total: number, limits: OrderLimits | null): { kind: 'min' | 'max'; limit: number } | null {
+  if (!limits || !Number.isFinite(total)) {
+    return null;
+  }
+  const min = limits.minTotal === null ? null : parseFloat(limits.minTotal);
+  if (min !== null && Number.isFinite(min) && total < min) {
+    return { kind: 'min', limit: min };
+  }
+  const max = limits.maxTotal === null ? null : parseFloat(limits.maxTotal);
+  if (max !== null && Number.isFinite(max) && total > max) {
+    return { kind: 'max', limit: max };
+  }
+
+  return null;
+}
+
 export default function CreateOrderPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -48,11 +70,17 @@ export default function CreateOrderPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [items, setItems] = useState<ErpCartItem[]>([]);
   const [quote, setQuote] = useState<ErpQuote | null>(null);
+  // Cart the current quote was priced for; a mismatch means the quote is stale.
+  const [quotedKey, setQuotedKey] = useState<string | null>(null);
+  // Kept across cart edits so the limit notice survives a cleared quote.
+  const [orderLimits, setOrderLimits] = useState<OrderLimits | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [cartExpanded, setCartExpanded] = useState(false);
   const [priceChanged, setPriceChanged] = useState(false);
   const [halfNotice, setHalfNotice] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const latestKeyRef = useRef<string | null>(null);
+  const itemsRef = useRef<ErpCartItem[]>([]);
 
   const customerQuery = useQuery({
     queryKey: ['erp-customer', customerId],
@@ -88,13 +116,18 @@ export default function CreateOrderPage() {
       : '/orders';
 
   const quoteMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars: { key: string; lines: QuoteLinesInput }) =>
       erpApi.quote({
         customerId: customerId!,
-        lines: items.map((i) => ({ itemId: i.itemId, quantity: i.quantity })),
+        lines: vars.lines,
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
+      if (vars.key !== latestKeyRef.current) {
+        return;
+      }
       setQuote(data);
+      setQuotedKey(vars.key);
+      setOrderLimits(data.orderLimits ?? null);
       setPriceChanged(false);
       setItems((prev) =>
         prev.map((item) => {
@@ -104,7 +137,7 @@ export default function CreateOrderPage() {
             ...item,
             name: line.name,
             unit: line.unit,
-            quantity: line.packQuantity ?? item.quantity,
+            quantity: line.packQuantity ? String(Number(line.packQuantity)) : item.quantity,
             unitPrice: line.unitPrice,
             compRaod: line.compRaod ?? item.compRaod,
           };
@@ -112,6 +145,8 @@ export default function CreateOrderPage() {
       );
     },
   });
+
+  const { mutate: requestQuote } = quoteMutation;
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -154,6 +189,8 @@ export default function CreateOrderPage() {
     if (id !== customerId) {
       setItems([]);
       setQuote(null);
+      setQuotedKey(null);
+      setOrderLimits(null);
       setPriceChanged(false);
     }
     setCustomerId(id);
@@ -161,7 +198,6 @@ export default function CreateOrderPage() {
 
   const handleAddProduct = useCallback((product: ErpItem, quantity = '1') => {
     if (!product.unitPrice) return;
-    setQuote(null);
     setItems((prev) => {
       const existing = prev.findIndex((item) => item.itemId === product.itemId);
       const allowHalf = canHalfPack(customerCanHalf, product.canRealHalfComp);
@@ -192,24 +228,20 @@ export default function CreateOrderPage() {
   }, [customerCanHalf]);
 
   const handleUpdateProductQuantity = useCallback((itemId: string, quantity: string) => {
-    setQuote(null);
     setItems((prev) =>
       prev.map((item) => (item.itemId === itemId ? { ...item, quantity } : item)),
     );
   }, []);
 
   const handleRemoveProduct = useCallback((itemId: string) => {
-    setQuote(null);
     setItems((prev) => prev.filter((item) => item.itemId !== itemId));
   }, []);
 
   const handleRemoveItem = useCallback((index: number) => {
-    setQuote(null);
     setItems((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const handleUpdateItem = useCallback((index: number, updates: Partial<OrderFormItem>) => {
-    setQuote(null);
     setItems((prev) => {
       const updated = [...prev];
       const qty = updates.quantity !== undefined ? String(updates.quantity) : updated[index].quantity;
@@ -233,6 +265,37 @@ export default function CreateOrderPage() {
     [items],
   );
 
+  const linesKey = useMemo(
+    () => items.map((item) => `${item.itemId}:${item.quantity}`).join('|'),
+    [items],
+  );
+  const quoteIsFresh = quote !== null && quotedKey === linesKey;
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  // Quantity changes on the review step must reprice promotions server-side.
+  useEffect(() => {
+    if (activeStep !== 'review' || !customerId || linesKey === quotedKey) {
+      return;
+    }
+    const lines: QuoteLinesInput = itemsRef.current.map((item) => ({
+      itemId: item.itemId,
+      quantity: item.quantity,
+    }));
+    if (lines.length === 0 || !lines.every((line) => Number(line.quantity) > 0)) {
+      return;
+    }
+    latestKeyRef.current = linesKey;
+    const timer = setTimeout(
+      () => requestQuote({ key: linesKey, lines }),
+      quotedKey === null ? 0 : REQUOTE_DEBOUNCE_MS,
+    );
+
+    return () => clearTimeout(timer);
+  }, [activeStep, customerId, linesKey, quotedKey, requestQuote]);
+
   const promoByItemId = useMemo(() => {
     const map: Record<string, { promoUnitPrice: string; discount: string }> = {};
     for (const line of quote?.lines ?? []) {
@@ -245,14 +308,13 @@ export default function CreateOrderPage() {
 
   const promoDiscountTotal = parseFloat(quote?.promoDiscountTotal ?? '0') || 0;
 
-  async function handleReview() {
+  function handleReview() {
     if (items.length === 0) {
       setValidationErrors([t('orders.itemsRequired', 'Add at least one product')]);
       return;
     }
     setValidationErrors([]);
     setActiveStep('review');
-    quoteMutation.mutate();
   }
 
   function handleSubmit() {
@@ -286,11 +348,19 @@ export default function CreateOrderPage() {
     );
   }
 
-  const displayTotal = quote?.total ?? items.reduce((sum, item) => {
+  const clientTotal = items.reduce((sum, item) => {
     if (!item.unitPrice) return sum;
     return sum + parseFloat(item.unitPrice) * (parseFloat(item.quantity) || 0) * packSize(item.compRaod);
   }, 0);
+  const displayTotal = quoteIsFresh && quote ? quote.total : clientTotal;
   const cartCount = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+
+  const breach = limitBreach(Number(displayTotal), orderLimits);
+  const orderLimitNotice = breach === null
+    ? null
+    : breach.kind === 'min'
+      ? t('orders.minOrderLimit', 'Minimum order limit is {{limit}}', { limit: formatCurrency(breach.limit) })
+      : t('orders.maxOrderLimit', 'Maximum order limit is {{limit}}', { limit: formatCurrency(breach.limit) });
 
   const steps: { key: Step; label: string; done: boolean }[] = [
     { key: 'customer', label: t('orders.customer', 'Customer'), done: !!customerId },
@@ -359,6 +429,12 @@ export default function CreateOrderPage() {
         {halfNotice && (
           <div className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2">
             <p className="text-xs text-[var(--color-warning)]">{halfNotice}</p>
+          </div>
+        )}
+
+        {activeStep === 'review' && orderLimitNotice && (
+          <div className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2">
+            <p className="text-xs font-medium text-[var(--color-warning)]">{orderLimitNotice}</p>
           </div>
         )}
 
@@ -511,7 +587,7 @@ export default function CreateOrderPage() {
             </div>
           )}
           <Card className="flex flex-col gap-2.5 !p-3 sm:!p-4 sm:gap-3">
-            {quoteMutation.isPending ? (
+            {quoteMutation.isPending && quote === null ? (
               <div className="flex justify-center py-8"><Spinner /></div>
             ) : (
               <OrderSummary
@@ -519,9 +595,10 @@ export default function CreateOrderPage() {
                 onRemoveItem={handleRemoveItem}
                 onUpdateItem={handleUpdateItem}
                 hideDiscount
-                serverTotal={quote?.total}
+                serverTotal={quoteIsFresh ? quote?.total : undefined}
                 promoByItemId={promoByItemId}
                 promoDiscountTotal={quote?.promoDiscountTotal}
+                promoPending={!quoteIsFresh}
                 onHalfDenied={() => setHalfNotice(t('orders.halfPackNotAllowed', 'Half packs are not allowed for this product or channel.'))}
               />
             )}

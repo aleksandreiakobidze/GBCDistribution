@@ -30,6 +30,10 @@ final class CustomerRecord
         public readonly array $kegs = [],
         public readonly ?string $balance = null,
         public readonly bool $canRealHalfComp = false,
+        /** SagadValiBlockView.MinReal; null when the customer has no minimum. */
+        public readonly ?string $minOrderTotal = null,
+        /** SagadValiBlockView.MaxReal; null when the customer has no maximum. */
+        public readonly ?string $maxOrderTotal = null,
     ) {
     }
 

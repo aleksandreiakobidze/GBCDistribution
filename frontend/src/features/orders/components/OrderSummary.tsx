@@ -13,6 +13,8 @@ interface OrderSummaryProps {
   /** Promo values are shown for information only and never change the total. */
   promoByItemId?: Record<string, { promoUnitPrice: string; discount: string }>;
   promoDiscountTotal?: string;
+  /** True while a fresh quote is in flight: promo values shown are still the previous ones. */
+  promoPending?: boolean;
   onHalfDenied?: () => void;
 }
 
@@ -24,10 +26,12 @@ export function OrderSummary({
   serverTotal,
   promoByItemId,
   promoDiscountTotal,
+  promoPending,
   onHalfDenied,
 }: OrderSummaryProps) {
   const { t } = useTranslation();
   const promoTotal = parseFloat(promoDiscountTotal ?? '0') || 0;
+  const promoMuted = promoPending ? 'opacity-60' : '';
 
   const linePieces = (item: OrderFormItem) => piecesFromPacks(item.quantity, item.compRaod);
 
@@ -87,7 +91,7 @@ export function OrderSummary({
                   {size > 1 ? ` · ${t('orders.packEquals', '1 pack = {{count}} pcs', { count: size })}` : ''}
                 </p>
                 {promo && (
-                  <p className="text-[10px] text-[var(--color-info-fg)] mt-px">
+                  <p className={`text-[10px] text-[var(--color-info-fg)] mt-px ${promoMuted}`}>
                     {t('orders.promoLineHint', 'Promotion {{price}} / unit — {{amount}} would be saved', {
                       price: formatCurrency(promo.promoUnitPrice),
                       amount: formatCurrency(promo.discount),
@@ -203,7 +207,7 @@ export function OrderSummary({
             </div>
           )}
           {promoTotal > 0 && (
-            <div className="flex items-center justify-between text-xs">
+            <div className={`flex items-center justify-between text-xs ${promoMuted}`}>
               <span className="text-[var(--color-text-secondary)]">
                 {t('orders.promoWouldBeDiscount', 'Promotion (not applied)')}
               </span>
@@ -221,7 +225,7 @@ export function OrderSummary({
             </span>
           </div>
           {promoTotal > 0 && (
-            <div className="flex items-center justify-between text-sm">
+            <div className={`flex items-center justify-between text-sm ${promoMuted}`}>
               <span className="font-medium text-[var(--color-info-fg)]">
                 {t('orders.promoWouldBeTotal', 'With promotion')}
               </span>

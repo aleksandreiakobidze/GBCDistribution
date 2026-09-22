@@ -311,6 +311,8 @@ export interface ErpCursorPage<T> {
   items: T[];
   hasMore: boolean;
   nextCursor: string | null;
+  todayTotal?: number;
+  allTotal?: number;
 }
 
 export interface ErpQuoteLine {
@@ -365,6 +367,8 @@ export interface ErpQuote {
   /** Sum of the line promoDiscount values; never subtracted from total. */
   promoDiscountTotal: string;
   promotions: Array<{ id: string; name: string; state: string; reason?: string }>;
+  /** SagadValiBlockView MinReal/MaxReal; null on a side means the customer has no limit there. */
+  orderLimits?: { minTotal: string | null; maxTotal: string | null };
   expiresAt: string;
 }
 
