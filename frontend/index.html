@@ -9,19 +9,33 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="BSC Distribution" />
     <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <title>BSC Distribution System</title>
     <script>
       // Blocking script: apply persisted theme before first paint to avoid FOUC
       (function() {
         try {
           var raw = localStorage.getItem('bsc-ui');
-          var theme = raw ? JSON.parse(raw).state.theme : 'system';
-          var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) {
-            document.documentElement.classList.add('dark');
-            document.documentElement.style.colorScheme = 'dark';
-            var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', '#0c1222');
+          var theme = raw ? JSON.parse(raw).state.theme : 'light';
+          if (theme === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var dark = theme === 'dark';
+          var root = document.documentElement;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (theme === 'medium') {
+            root.classList.add('medium');
+            root.style.colorScheme = 'light';
+            if (meta) meta.setAttribute('content', '#f4efe6');
+          } else if (dark) {
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+            if (meta) meta.setAttribute('content', '#0c1222');
           }
         } catch(e) {}
       })();

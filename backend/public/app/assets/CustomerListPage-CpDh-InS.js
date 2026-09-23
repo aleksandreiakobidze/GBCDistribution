@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-DWSWI4JT.js";import{i as t}from"./chunk-QFMPRPBF-BjznhQZb.js";import{t as n}from"./authStore-C1_jnCUj.js";import{t as r}from"./CustomerRouteBoard-CpH3nuBl.js";var i=e();function a(){return n(e=>e.user?.role)===`supervisor`?(0,i.jsx)(t,{to:`/routes`,replace:!0}):(0,i.jsx)(r,{})}export{a as default};

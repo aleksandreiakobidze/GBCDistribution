@@ -9,6 +9,9 @@ import {
   Warehouse,
   BarChart3,
   User as UserIcon,
+  Images,
+  Sun,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useAuthStore } from '@/stores/authStore';
@@ -34,7 +37,9 @@ function getNavItems(role: User['role']): BottomNavItem[] {
     case 'supervisor':
       return [
         { path: '/', label: 'nav.dashboard', icon: LayoutDashboard },
-        { path: '/routes', label: 'nav.routes', icon: Building2 },
+        { path: '/day', label: 'nav.day', icon: Sun },
+        { path: '/tasks', label: 'nav.tasks', icon: ClipboardList },
+        { path: '/gallery', label: 'nav.gallery', icon: Images },
         { path: '/profile', label: 'nav.profile', icon: UserIcon },
       ];
     case 'driver':

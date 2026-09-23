@@ -253,6 +253,225 @@ export interface ErpVisitSchedule {
   sunNum: number;
 }
 
+export interface ErpVisitPhoto {
+  id: number;
+  customerId: string;
+  customerName: string | null;
+  visitId: number | null;
+  phase: 'before' | 'end' | 'survey' | 'shelf';
+  comment: string | null;
+  tags: string[];
+  takenAt: string | null;
+  latitude: string | null;
+  longitude: string | null;
+}
+
+export interface ErpGalleryPhoto extends ErpVisitPhoto {
+  salesUserId: number;
+  salesName: string | null;
+  signature: string | null;
+  reviewComment: string | null;
+  rating: number | null;
+  rotation: number;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+}
+
+export interface ErpVisit {
+  id: number;
+  customerId: string;
+  customerName: string | null;
+  status: 'open' | 'arrived' | 'missed';
+  startedAt: string | null;
+  endedAt: string | null;
+  latitude: string | null;
+  longitude: string | null;
+}
+
+export interface ErpTask {
+  id: number;
+  salesUserId: number;
+  salesName: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  photoId: number | null;
+  title: string;
+  note: string | null;
+  dueOn: string | null;
+  status: 'open' | 'done';
+  completedAt: string | null;
+  checkedAt: string | null;
+  checkedByName: string | null;
+}
+
+export interface ErpVisitSurvey {
+  id: number;
+  visitId: number;
+  salesUserId: number;
+  salesName: string | null;
+  customerId: string;
+  customerName: string | null;
+  shelfStocked: boolean;
+  priceVisible: boolean;
+  promoPresent: boolean;
+  competitorSeen: boolean;
+}
+
+export interface ErpVisitCoaching {
+  id: number;
+  visitId: number;
+  customerId: string | null;
+  customerName: string | null;
+  salesUserId: number;
+  salesName: string | null;
+  supervisorName: string | null;
+  rating: number;
+  note: string | null;
+}
+
+export interface ErpShelfAudit {
+  id: number;
+  salesUserId: number;
+  salesName: string | null;
+  customerId: string;
+  customerName: string | null;
+  visitId: number | null;
+  photoId: number | null;
+  createdAt: string | null;
+  lines: Array<{ itemId: string; itemName: string | null; status: 'present' | 'missing' | 'low' }>;
+}
+
+export interface ErpPromoPlan {
+  id: number;
+  salesUserId: number;
+  salesName: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  title: string;
+  startsOn: string;
+  endsOn: string;
+  status: 'planned' | 'active' | 'done';
+  photoId: number | null;
+  note: string | null;
+}
+
+export interface ErpDayReport {
+  coverageVisited: number;
+  coveragePlanned: number;
+  tasksDone: number;
+  tasksTotal: number;
+  firstVisitAt: string | null;
+  lastVisitAt: string | null;
+  visits: Array<ErpVisit & { salesName: string | null }>;
+}
+
+export interface ErpDashboardRep {
+  salesUserId: number;
+  salesName: string | null;
+  planned: number;
+  visited: number;
+  coverage: number;
+  openTasks: number;
+  doneTasks: number;
+  checkedTasks: number;
+  unreviewedPhotos: number;
+  photosToday: number;
+  firstVisitAt: string | null;
+  lastVisitAt: string | null;
+}
+
+export interface ErpDashboardTotals {
+  reps: number;
+  planned: number;
+  visited: number;
+  openVisits: number;
+  missedVisits: number;
+  openTasks: number;
+  doneTasks: number;
+  checkedTasks: number;
+  overdueTasks: number;
+  unreviewedPhotos: number;
+  photosToday: number;
+  surveyCount: number;
+  shelfStocked: number;
+  priceVisible: number;
+  promoPresent: number;
+  competitorSeen: number;
+  promoPlanned: number;
+  promoActive: number;
+  promoDone: number;
+}
+
+export interface ErpDashboardNextStop {
+  customerId: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  latitude: string | null;
+  longitude: string | null;
+}
+
+export interface ErpDashboardMe {
+  planned: number;
+  visited: number;
+  openTasks: ErpTask[];
+  openTaskCount: number;
+  photosToday: Array<{ id: number; phase: string; customerName: string | null; takenAt: string | null }>;
+  savedOrders: number;
+  openVisit: ErpVisit | null;
+  coaching: { rating: number; note: string | null; supervisorName: string | null } | null;
+  firstVisitAt: string | null;
+  lastVisitAt: string | null;
+  nextStop: ErpDashboardNextStop | null;
+}
+
+export interface ErpFieldDashboard {
+  role: string;
+  date: string;
+  team: ErpDashboardRep[];
+  totals: ErpDashboardTotals;
+  trend: Array<{ date: string; visits: number; customers: number }>;
+  me: ErpDashboardMe | null;
+}
+
+export interface PresellerReport {
+  days: number;
+  from: string;
+  to: string;
+  visits: {
+    finished: number;
+    averageMinutes: number | null;
+    firstAt: string | null;
+    lastAt: string | null;
+    byDay: Array<{ date: string; visits: number }>;
+  };
+  survey: {
+    count: number;
+    shelfStocked: number;
+    priceVisible: number;
+    promoPresent: number;
+    competitorSeen: number;
+  };
+  tasks: { open: number; done: number; checked: number; overdue: number };
+  photos: { before: number; survey: number; shelf: number; end: number };
+  shelf: { audits: number; lines: number };
+  promos: { planned: number; active: number; done: number };
+  money: {
+    collected: number;
+    collectionsByDay: Array<{ date: string; amount: number }>;
+    returns: number;
+    savedOrders: number;
+    savedOrdersTotal: number;
+  };
+  customers: Array<{ customerId: string; customerName: string | null; visits: number }>;
+  coaching: {
+    count: number;
+    averageRating: number | null;
+    note: string | null;
+    supervisorName: string | null;
+  };
+}
+
 export interface ErpCustomer {
   customerId: string;
   name: string;

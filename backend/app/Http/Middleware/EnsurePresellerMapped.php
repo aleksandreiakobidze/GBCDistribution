@@ -28,6 +28,7 @@ class EnsurePresellerMapped
         if ($role === UserRole::Supervisor) {
             $target = $this->ownTeamSalesRep($user, $salesUserId);
             $request->attributes->set('idGvari', (int) $target->id_gvari);
+            $request->attributes->set('presellerUserId', (int) $target->id);
 
             return $next($request);
         }
@@ -45,6 +46,7 @@ class EnsurePresellerMapped
                 );
             }
             $request->attributes->set('idGvari', (int) $target->id_gvari);
+            $request->attributes->set('presellerUserId', (int) $target->id);
 
             return $next($request);
         }
@@ -58,6 +60,7 @@ class EnsurePresellerMapped
         }
 
         $request->attributes->set('idGvari', (int) $user->id_gvari);
+        $request->attributes->set('presellerUserId', (int) $user->id);
 
         return $next($request);
     }

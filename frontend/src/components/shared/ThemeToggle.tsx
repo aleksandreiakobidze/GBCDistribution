@@ -1,10 +1,10 @@
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, SunMedium, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useUiStore, type ThemeMode } from '@/stores/uiStore';
 
 const options: { value: ThemeMode; icon: typeof Sun; label: string }[] = [
   { value: 'light', icon: Sun, label: 'Light' },
-  { value: 'system', icon: Monitor, label: 'System' },
+  { value: 'medium', icon: SunMedium, label: 'Medium' },
   { value: 'dark', icon: Moon, label: 'Dark' },
 ];
 

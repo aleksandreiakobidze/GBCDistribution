@@ -32,7 +32,7 @@ export function SalesChart({ data, loading }: SalesChartProps) {
   const { t } = useTranslation();
 
   return (
-    <Card>
+    <Card className="h-full">
       <h3 className="mb-4 text-base font-semibold text-[var(--color-text)]">
         {t('dashboard.salesOverview', 'Sales Overview')}
       </h3>

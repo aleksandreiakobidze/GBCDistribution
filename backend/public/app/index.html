@@ -9,46 +9,61 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="BSC Distribution" />
     <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <title>BSC Distribution System</title>
     <script>
       // Blocking script: apply persisted theme before first paint to avoid FOUC
       (function() {
         try {
           var raw = localStorage.getItem('bsc-ui');
-          var theme = raw ? JSON.parse(raw).state.theme : 'system';
-          var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) {
-            document.documentElement.classList.add('dark');
-            document.documentElement.style.colorScheme = 'dark';
-            var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', '#0c1222');
+          var theme = raw ? JSON.parse(raw).state.theme : 'light';
+          if (theme === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var dark = theme === 'dark';
+          var root = document.documentElement;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (theme === 'medium') {
+            root.classList.add('medium');
+            root.style.colorScheme = 'light';
+            if (meta) meta.setAttribute('content', '#f4efe6');
+          } else if (dark) {
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+            if (meta) meta.setAttribute('content', '#0c1222');
           }
         } catch(e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-DXOrGwEq.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-DWSWI4JT.js">
-    <link rel="modulepreload" crossorigin href="/assets/preload-helper-D4M6sveU.js">
-    <link rel="modulepreload" crossorigin href="/assets/ui-CZjRMIxm.js">
-    <link rel="modulepreload" crossorigin href="/assets/QueryClientProvider-CYS7P0vb.js">
-    <link rel="modulepreload" crossorigin href="/assets/mutation-DNkxLook.js">
-    <link rel="modulepreload" crossorigin href="/assets/query-BT6KRby_.js">
-    <link rel="modulepreload" crossorigin href="/assets/banknote-DnlBcTbe.js">
-    <link rel="modulepreload" crossorigin href="/assets/building-2-DZoShM57.js">
-    <link rel="modulepreload" crossorigin href="/assets/ThemeToggle-B7qLfAwg.js">
-    <link rel="modulepreload" crossorigin href="/assets/file-text-Dh1vORM8.js">
-    <link rel="modulepreload" crossorigin href="/assets/package-C84y7N1M.js">
-    <link rel="modulepreload" crossorigin href="/assets/rotate-ccw-DZeY5nKd.js">
-    <link rel="modulepreload" crossorigin href="/assets/shopping-cart-BBPv2TFy.js">
-    <link rel="modulepreload" crossorigin href="/assets/truck-CEU4ilBM.js">
-    <link rel="modulepreload" crossorigin href="/assets/user-C34VW-zW.js">
-    <link rel="modulepreload" crossorigin href="/assets/warehouse-BMl07tzq.js">
-    <link rel="modulepreload" crossorigin href="/assets/chunk-QFMPRPBF-BjznhQZb.js">
-    <link rel="modulepreload" crossorigin href="/assets/LanguageToggle-CaN56F4B.js">
-    <link rel="modulepreload" crossorigin href="/assets/auth.api-BQ1Q5Vhu.js">
-    <link rel="modulepreload" crossorigin href="/assets/erp.api-CYJ4igfc.js">
-    <link rel="modulepreload" crossorigin href="/assets/authStore-C1_jnCUj.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-BUcMS1Gu.css">
+    <script type="module" crossorigin src="/assets/index-DKs_Doaa.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-l7e5u58Y.js">
+    <link rel="modulepreload" crossorigin href="/assets/ui-D7NNzt0q.js">
+    <link rel="modulepreload" crossorigin href="/assets/mutation-BmRuCbhN.js">
+    <link rel="modulepreload" crossorigin href="/assets/banknote-CBT72gRr.js">
+    <link rel="modulepreload" crossorigin href="/assets/building-2-DpeyUEH6.js">
+    <link rel="modulepreload" crossorigin href="/assets/calendar-days-Den--9io.js">
+    <link rel="modulepreload" crossorigin href="/assets/map-DPAQDdkF.js">
+    <link rel="modulepreload" crossorigin href="/assets/middleware-D1zr8Zj2.js">
+    <link rel="modulepreload" crossorigin href="/assets/ThemeToggle-ByfKjz6z.js">
+    <link rel="modulepreload" crossorigin href="/assets/clipboard-list-m9ZccSeW.js">
+    <link rel="modulepreload" crossorigin href="/assets/file-text-Dbo-Qavl.js">
+    <link rel="modulepreload" crossorigin href="/assets/images-C7yySoY5.js">
+    <link rel="modulepreload" crossorigin href="/assets/package-TShOx0xc.js">
+    <link rel="modulepreload" crossorigin href="/assets/rotate-ccw-C26A4sHx.js">
+    <link rel="modulepreload" crossorigin href="/assets/shopping-cart-BjmM_af_.js">
+    <link rel="modulepreload" crossorigin href="/assets/truck-Dz6S2C9u.js">
+    <link rel="modulepreload" crossorigin href="/assets/user-BWUa-6n8.js">
+    <link rel="modulepreload" crossorigin href="/assets/warehouse-B96t2Nx-.js">
+    <link rel="modulepreload" crossorigin href="/assets/LanguageToggle-rPxGdMlx.js">
+    <link rel="modulepreload" crossorigin href="/assets/auth.api-BUapUuXu.js">
+    <link rel="modulepreload" crossorigin href="/assets/erp.api-Bz-39uBS.js">
+    <link rel="modulepreload" crossorigin href="/assets/authStore-DJRb_JUo.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-CXqjvt_d.css">
   <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
   <body>
     <div id="root"></div>

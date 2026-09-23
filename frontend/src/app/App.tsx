@@ -18,6 +18,10 @@ const CreateErpReturnPage = lazy(() => import('@/features/customers/pages/Create
 const CustomerPromotionsPage = lazy(() => import('@/features/customers/pages/CustomerPromotionsPage'));
 const CustomerFormPage = lazy(() => import('@/features/customers/pages/CustomerFormPage'));
 const RoutesPage = lazy(() => import('@/features/customers/pages/RoutesPage'));
+const GalleryPage = lazy(() => import('@/features/gallery/pages/GalleryPage'));
+const TasksPage = lazy(() => import('@/features/field/pages/TasksPage'));
+const DayPage = lazy(() => import('@/features/field/pages/DayPage'));
+const PromoCalendarPage = lazy(() => import('@/features/field/pages/PromoCalendarPage'));
 const OrderListPage = lazy(() => import('@/features/orders/pages/OrderListPage'));
 const CreateOrderPage = lazy(() => import('@/features/orders/pages/CreateOrderPage'));
 const SavedOrderDetailPage = lazy(() => import('@/features/orders/pages/SavedOrderDetailPage'));
@@ -34,6 +38,7 @@ const ReturnListPage = lazy(() => import('@/features/returns/pages/ReturnListPag
 const ErpReturnDetailPage = lazy(() => import('@/features/returns/pages/ErpReturnDetailPage'));
 const CollectionListPage = lazy(() => import('@/features/collections/pages/CollectionListPage'));
 const CollectionDetailPage = lazy(() => import('@/features/collections/pages/CollectionDetailPage'));
+const MyReportsPage = lazy(() => import('@/features/reports/pages/MyReportsPage'));
 const SalesReportPage = lazy(() => import('@/features/reports/pages/SalesReportPage'));
 const InventoryReportPage = lazy(() => import('@/features/reports/pages/InventoryReportPage'));
 const PerformanceReportPage = lazy(() => import('@/features/reports/pages/PerformanceReportPage'));
@@ -89,6 +94,10 @@ export default function App() {
                 <Route path="customers/:id/promotions" element={<CustomerPromotionsPage />} />
                 <Route path="customers/:id" element={<CustomerDetailPage />} />
                 <Route path="routes" element={<RoutesPage />} />
+                <Route path="gallery" element={<GalleryPage />} />
+                <Route path="tasks" element={<TasksPage />} />
+                <Route path="day" element={<DayPage />} />
+                <Route path="promos" element={<PromoCalendarPage />} />
 
                 <Route path="orders" element={<OrderListPage />} />
                 <Route path="orders/new" element={<CreateOrderPage />} />
@@ -116,6 +125,7 @@ export default function App() {
                 <Route path="collections/:id/edit" element={<CollectPaymentPage />} />
                 <Route path="collections/:id" element={<CollectionDetailPage />} />
 
+                <Route path="my-reports" element={<MyReportsPage />} />
                 <Route path="reports" element={<SalesReportPage />} />
                 <Route path="reports/inventory" element={<InventoryReportPage />} />
                 <Route path="reports/performance" element={<PerformanceReportPage />} />

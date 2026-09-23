@@ -21,7 +21,7 @@ export function TopProducts({ data, loading }: TopProductsProps) {
   const maxRevenue = data.length ? Math.max(...data.map((d) => d.total_revenue)) : 1;
 
   return (
-    <Card>
+    <Card className="h-full">
       <h3 className="mb-4 text-base font-semibold text-[var(--color-text)]">
         {t('dashboard.topProducts', 'Top Products')}
       </h3>

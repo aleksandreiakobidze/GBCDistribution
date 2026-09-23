@@ -1,22 +1,32 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
-export type ResolvedTheme = 'light' | 'dark';
+export type ThemeMode = 'light' | 'medium' | 'dark';
+export type ResolvedTheme = ThemeMode;
 
-function getSystemTheme(): ResolvedTheme {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+function normalizeTheme(theme: string | undefined): ThemeMode {
+  if (theme === 'dark' || theme === 'medium' || theme === 'light') return theme;
+  if (theme === 'system' && typeof window !== 'undefined') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
 }
+
+const themeColors: Record<ResolvedTheme, string> = {
+  light: '#2563eb',
+  medium: '#f4efe6',
+  dark: '#0c1222',
+};
 
 function applyThemeToDOM(resolved: ResolvedTheme) {
   const root = document.documentElement;
   root.classList.toggle('dark', resolved === 'dark');
-  root.style.colorScheme = resolved;
+  root.classList.toggle('medium', resolved === 'medium');
+  root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
 
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute('content', resolved === 'dark' ? '#0c1222' : '#2563eb');
+    meta.setAttribute('content', themeColors[resolved]);
   }
 }
 
@@ -35,18 +45,17 @@ interface UiState {
 
 export const useUiStore = create<UiState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       sidebarOpen: true,
-      theme: 'system',
-      resolvedTheme: getSystemTheme(),
+      theme: 'light',
+      resolvedTheme: 'light',
       language: 'en',
       defaultWarehouseId: '1',
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setTheme: (theme) => {
-        const resolved: ResolvedTheme = theme === 'system' ? getSystemTheme() : theme;
-        applyThemeToDOM(resolved);
-        set({ theme, resolvedTheme: resolved });
+        applyThemeToDOM(theme);
+        set({ theme, resolvedTheme: theme });
       },
       setLanguage: (language) => set({ language }),
       setDefaultWarehouseId: (id) => set({ defaultWarehouseId: id }),
@@ -61,22 +70,18 @@ export const useUiStore = create<UiState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        const resolved: ResolvedTheme = state.theme === 'system' ? getSystemTheme() : state.theme;
-        state.resolvedTheme = resolved;
-        applyThemeToDOM(resolved);
+        const stored = state.theme as string;
+        const theme = normalizeTheme(stored);
+        state.theme = theme;
+        state.resolvedTheme = theme;
+        applyThemeToDOM(theme);
+        if (stored !== theme) {
+          queueMicrotask(() => {
+            useUiStore.setState({ theme, resolvedTheme: theme });
+          });
+        }
       },
     }
   )
 );
 
-if (typeof window !== 'undefined') {
-  const mql = window.matchMedia('(prefers-color-scheme: dark)');
-  mql.addEventListener('change', () => {
-    const store = useUiStore.getState();
-    if (store.theme === 'system') {
-      const resolved = getSystemTheme();
-      applyThemeToDOM(resolved);
-      useUiStore.setState({ resolvedTheme: resolved });
-    }
-  });
-}

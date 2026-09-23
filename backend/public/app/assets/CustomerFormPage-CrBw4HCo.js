@@ -1,0 +1,1 @@
+import{a as e,t}from"./jsx-runtime-l7e5u58Y.js";var n=t();function r(){return(0,n.jsx)(e,{to:`/customers`,replace:!0})}export{r as default};

@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Erp\Fake\FakeErpState;
+use App\Erp\Support\GeoPoint;
 use App\Models\ErpOrderReceipt;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -870,7 +874,7 @@ class V1ErpIsolationTest extends TestCase
 
     public function test_customer_list_totals_keep_today_within_all(): void
     {
-        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-16 12:00:00', 'Asia/Tbilisi'));
+        Carbon::setTestNow(Carbon::parse('2026-09-16 12:00:00', 'Asia/Tbilisi'));
 
         try {
             Sanctum::actingAs($this->preseller(11));
@@ -886,13 +890,13 @@ class V1ErpIsolationTest extends TestCase
             $this->assertSame(2, $today['todayTotal']);
             $this->assertEqualsCanonicalizing(['1001', '1002'], collect($today['items'])->pluck('customerId')->all());
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
     public function test_today_filter_uses_tbilisi_weekday_and_skips_zero_coords(): void
     {
-        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-09-16 12:00:00', 'Asia/Tbilisi'));
+        Carbon::setTestNow(Carbon::parse('2026-09-16 12:00:00', 'Asia/Tbilisi'));
 
         try {
             Sanctum::actingAs($this->preseller(11));
@@ -904,11 +908,11 @@ class V1ErpIsolationTest extends TestCase
             $this->assertEqualsCanonicalizing(['1001', '1002', '3001'], $all->pluck('customerId')->all());
 
             $zero = $all->firstWhere('customerId', '1002');
-            $this->assertFalse(\App\Erp\Support\GeoPoint::isPlottable($zero['latitude'], $zero['longitude']));
+            $this->assertFalse(GeoPoint::isPlottable($zero['latitude'], $zero['longitude']));
             $plot = $all->firstWhere('customerId', '1001');
-            $this->assertTrue(\App\Erp\Support\GeoPoint::isPlottable($plot['latitude'], $plot['longitude']));
+            $this->assertTrue(GeoPoint::isPlottable($plot['latitude'], $plot['longitude']));
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -1103,9 +1107,669 @@ class V1ErpIsolationTest extends TestCase
         ])->assertStatus(404);
     }
 
+    public function test_field_visit_stays_with_the_sales_rep_and_their_supervisor(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-22 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $superB = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id]);
+            $davit = $this->preseller(12, ['supervisor_id' => $superB->id]);
+
+            Sanctum::actingAs($nino);
+            $started = $this->postJson('/api/v1/visits', [
+                'customerId' => '1001',
+                'latitude' => '41.9150000',
+                'longitude' => '45.4730000',
+            ])->assertCreated()->json('data');
+
+            $this->assertSame('1001', $started['customerId']);
+            $this->assertSame('Org A', $started['customerName']);
+            $this->assertSame('open', $started['status']);
+            $this->assertSame('41.9150000', $started['latitude']);
+            $this->assertNull($started['endedAt']);
+
+            $this->postJson('/api/v1/visits', ['customerId' => '1002'])
+                ->assertStatus(409)
+                ->assertJsonPath('code', 'VISIT_ALREADY_OPEN');
+
+            $finished = $this->patchJson('/api/v1/visits/'.$started['id'], [
+                'outcome' => 'arrived',
+            ])->assertOk()->json('data');
+            $this->assertSame('arrived', $finished['status']);
+            $this->assertNotNull($finished['endedAt']);
+
+            $today = $this->getJson('/api/v1/visits?day=today')->assertOk()->json('data');
+            $this->assertCount(1, $today);
+            $this->assertSame($started['id'], $today[0]['id']);
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/visits?day=today')->json('data'));
+            $this->patchJson('/api/v1/visits/'.$started['id'], ['outcome' => 'missed'])
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'VISIT_NOT_FOUND');
+
+            Sanctum::actingAs($superA);
+            $seen = $this->getJson('/api/v1/visits?day=today&salesUserId='.$nino->id)->assertOk()->json('data');
+            $this->assertSame([$started['id']], collect($seen)->pluck('id')->all());
+            $this->postJson('/api/v1/visits?salesUserId='.$nino->id, ['customerId' => '1001'])
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'VISIT_READ_ONLY');
+
+            Sanctum::actingAs($superB);
+            $this->getJson('/api/v1/visits?day=today&salesUserId='.$nino->id)
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'FORBIDDEN_PRESELLER');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_visit_photo_stays_with_the_sales_rep_and_their_supervisor(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-22 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $superB = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id]);
+            $davit = $this->preseller(12, ['supervisor_id' => $superB->id]);
+
+            Sanctum::actingAs($nino);
+            $created = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'comment' => 'თარო',
+                'tags' => '#თარო #ფასი',
+                'latitude' => '41.9150000',
+                'longitude' => '45.4730000',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+
+            $this->assertSame('before', $created['phase']);
+            $this->assertSame('Org A', $created['customerName']);
+            $this->assertSame(['თარო', 'ფასი'], $created['tags']);
+            $this->assertSame('თარო', $created['comment']);
+            $this->assertNull($created['visitId']);
+            $this->assertSame('41.9150000', $created['latitude']);
+
+            $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'end',
+                'photo' => UploadedFile::fake()->image('end.jpg', 20, 20),
+            ])->assertStatus(422)->assertJsonPath('code', 'VISIT_REQUIRED');
+
+            $this->postJson('/api/v1/visits', ['customerId' => '1001'])->assertCreated();
+            $ended = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'end',
+                'photo' => UploadedFile::fake()->image('end.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+            $this->assertSame('end', $ended['phase']);
+            $this->assertNotNull($ended['visitId']);
+
+            $list = $this->getJson('/api/v1/visit-photos?customerId=1001')->assertOk()->json('data');
+            $this->assertCount(2, $list);
+            $this->get('/api/v1/visit-photos/'.$created['id'].'/file')->assertOk();
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/visit-photos?customerId=1001')->json('data'));
+            $this->get('/api/v1/visit-photos/'.$created['id'].'/file')
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'PHOTO_NOT_FOUND');
+
+            Sanctum::actingAs($superA);
+            $seen = $this->getJson('/api/v1/visit-photos?customerId=1001&salesUserId='.$nino->id)
+                ->assertOk()
+                ->json('data');
+            $this->assertCount(2, $seen);
+            $this->get('/api/v1/visit-photos/'.$created['id'].'/file?salesUserId='.$nino->id)->assertOk();
+            $this->post('/api/v1/visit-photos?salesUserId='.$nino->id, [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'photo' => UploadedFile::fake()->image('nope.jpg', 20, 20),
+            ])->assertStatus(403)->assertJsonPath('code', 'PHOTO_READ_ONLY');
+
+            Sanctum::actingAs($superB);
+            $this->getJson('/api/v1/visit-photos?customerId=1001&salesUserId='.$nino->id)
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'FORBIDDEN_PRESELLER');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_gallery_photo_stays_with_the_owning_supervisor(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-22 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null, 'name' => 'Sofo A']);
+            $superB = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id]);
+            $davit = $this->preseller(12, ['supervisor_id' => $superB->id]);
+
+            Sanctum::actingAs($nino);
+            $created = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'comment' => 'თარო',
+                'tags' => '#თარო',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+            $second = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'photo' => UploadedFile::fake()->image('shelf-2.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+
+            Sanctum::actingAs($superA);
+            $list = $this->getJson('/api/v1/gallery/photos')->assertOk()->json('data');
+            $this->assertEqualsCanonicalizing([$created['id'], $second['id']], collect($list)->pluck('id')->all());
+            $this->assertSame('Org A', $list[0]['signature']);
+            $this->assertSame('თარო', collect($list)->firstWhere('id', $created['id'])['comment']);
+
+            $bySignature = $this->getJson('/api/v1/gallery/photos?q=Org')->assertOk()->json('data');
+            $this->assertCount(2, $bySignature);
+            $byTag = $this->getJson('/api/v1/gallery/photos?tag=თარო')->assertOk()->json('data');
+            $this->assertSame([$created['id']], collect($byTag)->pluck('id')->all());
+            $this->assertCount(2, $this->getJson('/api/v1/gallery/photos?day=2026-09-22')->json('data'));
+            $this->assertSame([], $this->getJson('/api/v1/gallery/photos?day=2026-09-21')->json('data'));
+
+            $reviewed = $this->patchJson('/api/v1/gallery/photos/'.$created['id'], [
+                'signature' => 'თარო A',
+                'reviewComment' => 'კარგია',
+                'rating' => 4,
+                'rotation' => 90,
+                'reviewed' => true,
+            ])->assertOk()->json('data');
+            $this->assertSame('თარო A', $reviewed['signature']);
+            $this->assertSame('კარგია', $reviewed['reviewComment']);
+            $this->assertSame('თარო', $reviewed['comment']);
+            $this->assertSame(4, $reviewed['rating']);
+            $this->assertSame(90, $reviewed['rotation']);
+            $this->assertSame('Sofo A', $reviewed['reviewedByName']);
+            $this->assertNotNull($reviewed['reviewedAt']);
+
+            $this->get('/api/v1/gallery/photos/'.$created['id'].'/file')->assertOk();
+            $this->postJson('/api/v1/gallery/photos/download', ['ids' => [$created['id']]])
+                ->assertOk()
+                ->assertHeader('content-type', 'image/jpeg');
+            $zip = $this->postJson('/api/v1/gallery/photos/download', ['ids' => [$created['id'], $second['id']]]);
+            $zip->assertOk();
+            $this->assertStringContainsString('zip', (string) $zip->headers->get('content-type'));
+
+            Sanctum::actingAs($nino);
+            $own = $this->getJson('/api/v1/gallery/photos')->assertOk()->json('data');
+            $this->assertEqualsCanonicalizing([$created['id'], $second['id']], collect($own)->pluck('id')->all());
+            $this->get('/api/v1/gallery/photos/'.$created['id'].'/file')->assertOk();
+            $this->patchJson('/api/v1/gallery/photos/'.$created['id'], [
+                'rotation' => 0,
+                'reviewed' => false,
+            ])->assertStatus(403)->assertJsonPath('code', 'GALLERY_FORBIDDEN');
+            $this->postJson('/api/v1/gallery/photos/download', ['ids' => [$created['id']]])
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'GALLERY_FORBIDDEN');
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/gallery/photos')->assertOk()->json('data'));
+            $this->get('/api/v1/gallery/photos/'.$created['id'].'/file')
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'PHOTO_NOT_FOUND');
+            $this->patchJson('/api/v1/gallery/photos/'.$created['id'], [
+                'rotation' => 0,
+                'reviewed' => false,
+            ])->assertStatus(403)->assertJsonPath('code', 'GALLERY_FORBIDDEN');
+            $this->postJson('/api/v1/gallery/photos/download', ['ids' => [$created['id']]])
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'GALLERY_FORBIDDEN');
+
+            Sanctum::actingAs($superB);
+            $this->assertSame([], $this->getJson('/api/v1/gallery/photos')->json('data'));
+            $this->get('/api/v1/gallery/photos/'.$created['id'].'/file')
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'PHOTO_NOT_FOUND');
+            $this->patchJson('/api/v1/gallery/photos/'.$created['id'], [
+                'rotation' => 0,
+                'reviewed' => false,
+            ])->assertStatus(404)->assertJsonPath('code', 'PHOTO_NOT_FOUND');
+            $this->postJson('/api/v1/gallery/photos/download', ['ids' => [$created['id']]])
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'PHOTO_NOT_FOUND');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_field_work_stays_with_the_owning_supervisor(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-22 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null, 'name' => 'Sofo A']);
+            $superB = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id]);
+            $davit = $this->preseller(12, ['supervisor_id' => $superB->id]);
+
+            Sanctum::actingAs($nino);
+            $visit = $this->postJson('/api/v1/visits', ['customerId' => '1001'])->assertCreated()->json('data');
+            $photo = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'shelf',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+            $this->assertSame('shelf', $photo['phase']);
+            $this->assertSame($visit['id'], $photo['visitId']);
+
+            Sanctum::actingAs($superA);
+            $task = $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $nino->id,
+                'customerId' => '1001',
+                'photoId' => $photo['id'],
+                'title' => 'თარო შეავსე',
+                'dueOn' => '2026-09-22',
+            ])->assertCreated()->json('data');
+            $this->assertSame('open', $task['status']);
+            $this->assertSame($photo['id'], $task['photoId']);
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/tasks')->json('data'));
+            $this->patchJson('/api/v1/tasks/'.$task['id'], ['action' => 'complete'])
+                ->assertStatus(404)
+                ->assertJsonPath('code', 'TASK_NOT_FOUND');
+            $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $nino->id,
+                'title' => 'არა',
+            ])->assertStatus(403);
+
+            Sanctum::actingAs($superB);
+            $this->assertSame([], $this->getJson('/api/v1/tasks')->json('data'));
+            $this->patchJson('/api/v1/tasks/'.$task['id'], ['action' => 'check'])->assertStatus(404);
+
+            Sanctum::actingAs($nino);
+            $done = $this->patchJson('/api/v1/tasks/'.$task['id'], ['action' => 'complete'])->assertOk()->json('data');
+            $this->assertSame('done', $done['status']);
+            $this->assertNotNull($done['completedAt']);
+
+            Sanctum::actingAs($superA);
+            $checked = $this->patchJson('/api/v1/tasks/'.$task['id'], ['action' => 'check'])->assertOk()->json('data');
+            $this->assertSame('Sofo A', $checked['checkedByName']);
+            $this->assertNotNull($checked['checkedAt']);
+
+            Sanctum::actingAs($nino);
+            $survey = $this->postJson('/api/v1/visit-surveys', [
+                'visitId' => $visit['id'],
+                'shelfStocked' => true,
+                'priceVisible' => true,
+                'promoPresent' => false,
+                'competitorSeen' => false,
+            ])->assertCreated()->json('data');
+            $this->assertTrue($survey['shelfStocked']);
+            $this->assertFalse($survey['promoPresent']);
+
+            Sanctum::actingAs($superA);
+            $this->assertCount(1, $this->getJson('/api/v1/visit-surveys?customerId=1001')->json('data'));
+            $coaching = $this->postJson('/api/v1/visit-coaching', [
+                'visitId' => $visit['id'],
+                'rating' => 4,
+                'note' => 'კარგი ვიზიტი',
+            ])->assertCreated()->json('data');
+            $this->assertSame(4, $coaching['rating']);
+
+            Sanctum::actingAs($nino);
+            $seenCoaching = $this->getJson('/api/v1/visit-coaching?customerId=1001')->assertOk()->json('data');
+            $this->assertSame('კარგი ვიზიტი', $seenCoaching[0]['note']);
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/visit-surveys')->json('data'));
+            $this->assertSame([], $this->getJson('/api/v1/visit-coaching')->json('data'));
+            $this->postJson('/api/v1/visit-coaching', [
+                'visitId' => $visit['id'],
+                'rating' => 1,
+            ])->assertStatus(403);
+
+            Sanctum::actingAs($nino);
+            $audit = $this->postJson('/api/v1/shelf-audits', [
+                'customerId' => '1001',
+                'photoId' => $photo['id'],
+                'lines' => [['itemId' => '0001', 'status' => 'present']],
+            ])->assertCreated()->json('data');
+            $this->assertSame('present', $audit['lines'][0]['status']);
+            $this->assertSame($photo['id'], $audit['photoId']);
+
+            Sanctum::actingAs($superB);
+            $this->assertSame([], $this->getJson('/api/v1/shelf-audits')->json('data'));
+
+            Sanctum::actingAs($superA);
+            $this->assertCount(1, $this->getJson('/api/v1/shelf-audits?customerId=1001')->json('data'));
+            $promo = $this->postJson('/api/v1/promo-plans', [
+                'salesUserId' => $nino->id,
+                'customerId' => '1001',
+                'title' => 'თაროს აქცია',
+                'startsOn' => '2026-09-22',
+                'endsOn' => '2026-09-28',
+            ])->assertCreated()->json('data');
+            $copy = $this->postJson('/api/v1/promo-plans/'.$promo['id'].'/copy')->assertCreated()->json('data');
+            $this->assertSame('planned', $copy['status']);
+            $this->assertNull($copy['photoId']);
+            $finishedPromo = $this->patchJson('/api/v1/promo-plans/'.$promo['id'], [
+                'status' => 'done',
+                'photoId' => $photo['id'],
+            ])->assertOk()->json('data');
+            $this->assertSame('done', $finishedPromo['status']);
+            $this->assertSame($photo['id'], $finishedPromo['photoId']);
+
+            Sanctum::actingAs($davit);
+            $this->assertSame([], $this->getJson('/api/v1/promo-plans')->json('data'));
+            $this->patchJson('/api/v1/promo-plans/'.$promo['id'], ['title' => 'არა'])->assertStatus(403);
+
+            Sanctum::actingAs($superB);
+            $this->assertSame([], $this->getJson('/api/v1/promo-plans')->json('data'));
+
+            Sanctum::actingAs($nino);
+            $this->patchJson('/api/v1/visits/'.$visit['id'], ['outcome' => 'arrived'])->assertOk();
+            $day = $this->getJson('/api/v1/day')->assertOk()->json('data');
+            $this->assertSame(1, $day['coverageVisited']);
+            $this->assertSame(1, $day['tasksDone']);
+            $this->assertSame(1, $day['tasksTotal']);
+            $this->assertNotNull($day['firstVisitAt']);
+            $this->assertSame($visit['id'], $day['visits'][0]['id']);
+
+            Sanctum::actingAs($superB);
+            $hidden = $this->getJson('/api/v1/day')->assertOk()->json('data');
+            $this->assertSame(0, $hidden['coverageVisited']);
+            $this->assertSame([], $hidden['visits']);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_dashboard_reports_only_the_own_team(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-16 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null, 'name' => 'Sofo A']);
+            $superB = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id, 'name' => 'Nino']);
+            $davit = $this->preseller(12, ['supervisor_id' => $superB->id]);
+
+            Sanctum::actingAs($nino);
+            $visit = $this->postJson('/api/v1/visits', ['customerId' => '1001'])->assertCreated()->json('data');
+            $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated();
+            $this->patchJson('/api/v1/visits/'.$visit['id'], ['outcome' => 'arrived'])->assertOk();
+            $this->postJson('/api/v1/visit-surveys', [
+                'visitId' => $visit['id'],
+                'shelfStocked' => true,
+                'priceVisible' => true,
+                'promoPresent' => false,
+                'competitorSeen' => false,
+            ])->assertCreated();
+
+            Sanctum::actingAs($superA);
+            $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $nino->id,
+                'customerId' => '1001',
+                'title' => 'ვადაგასული დავალება',
+                'dueOn' => '2026-09-14',
+            ])->assertCreated();
+            $this->postJson('/api/v1/visit-coaching', [
+                'visitId' => $visit['id'],
+                'rating' => 5,
+                'note' => 'სუფთა თარო',
+            ])->assertCreated();
+
+            $mine = $this->getJson('/api/v1/dashboard')->assertOk()->json('data');
+            $this->assertSame('supervisor', $mine['role']);
+            $this->assertSame('2026-09-16', $mine['date']);
+            $this->assertSame([$nino->id], collect($mine['team'])->pluck('salesUserId')->all());
+            $this->assertSame('Nino', $mine['team'][0]['salesName']);
+            $this->assertSame(2, $mine['team'][0]['planned']);
+            $this->assertSame(1, $mine['team'][0]['visited']);
+            $this->assertSame(50, $mine['team'][0]['coverage']);
+            $this->assertSame(1, $mine['team'][0]['unreviewedPhotos']);
+            $this->assertSame(1, $mine['totals']['reps']);
+            $this->assertSame(1, $mine['totals']['visited']);
+            $this->assertSame(1, $mine['totals']['openTasks']);
+            $this->assertSame(1, $mine['totals']['overdueTasks']);
+            $this->assertSame(1, $mine['totals']['surveyCount']);
+            $this->assertSame(1, $mine['totals']['shelfStocked']);
+            $this->assertCount(7, $mine['trend']);
+            $this->assertSame('2026-09-16', $mine['trend'][6]['date']);
+            $this->assertSame(1, $mine['trend'][6]['visits']);
+            $this->assertNull($mine['me']);
+
+            Sanctum::actingAs($superB);
+            $other = $this->getJson('/api/v1/dashboard')->assertOk()->json('data');
+            $this->assertSame([$davit->id], collect($other['team'])->pluck('salesUserId')->all());
+            $this->assertSame(0, $other['totals']['visited']);
+            $this->assertSame(0, $other['totals']['openTasks']);
+            $this->assertSame(0, $other['totals']['unreviewedPhotos']);
+
+            Sanctum::actingAs($nino);
+            $own = $this->getJson('/api/v1/dashboard')->assertOk()->json('data');
+            $this->assertSame('sales_rep', $own['role']);
+            $this->assertSame([$nino->id], collect($own['team'])->pluck('salesUserId')->all());
+            $this->assertSame(2, $own['me']['planned']);
+            $this->assertSame(1, $own['me']['visited']);
+            $this->assertSame(1, $own['me']['openTaskCount']);
+            $this->assertSame(1, count($own['me']['photosToday']));
+            $this->assertSame(5, $own['me']['coaching']['rating']);
+            $this->assertSame('Sofo A', $own['me']['coaching']['supervisorName']);
+            $this->assertSame('1002', $own['me']['nextStop']['customerId']);
+            $this->assertNull($own['me']['openVisit']);
+
+            Sanctum::actingAs($davit);
+            $hidden = $this->getJson('/api/v1/dashboard')->assertOk()->json('data');
+            $this->assertSame(0, $hidden['me']['visited']);
+            $this->assertNull($hidden['me']['coaching']);
+            $this->assertSame([], $hidden['me']['photosToday']);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_multi_value_filters_narrow_tasks_promos_day_and_gallery(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-16 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $supervisor = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null]);
+            $nino = $this->preseller(11, ['supervisor_id' => $supervisor->id]);
+            $davit = $this->preseller(12, ['supervisor_id' => $supervisor->id]);
+
+            Sanctum::actingAs($nino);
+            $visit = $this->postJson('/api/v1/visits', ['customerId' => '1001'])->assertCreated()->json('data');
+            $tagged = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'shelf',
+                'tags' => '#თარო',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+            $plain = $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'photo' => UploadedFile::fake()->image('front.jpg', 20, 20),
+            ])->assertCreated()->json('data');
+            $this->patchJson('/api/v1/visits/'.$visit['id'], ['outcome' => 'arrived'])->assertOk();
+
+            Sanctum::actingAs($davit);
+            $davitVisit = $this->postJson('/api/v1/visits', ['customerId' => '2001'])->assertCreated()->json('data');
+            $this->patchJson('/api/v1/visits/'.$davitVisit['id'], ['outcome' => 'arrived'])->assertOk();
+
+            Sanctum::actingAs($supervisor);
+            $open = $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $nino->id,
+                'title' => 'ღია დავალება',
+            ])->assertCreated()->json('data');
+            $toClose = $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $davit->id,
+                'title' => 'დახურული დავალება',
+            ])->assertCreated()->json('data');
+
+            Sanctum::actingAs($davit);
+            $this->patchJson('/api/v1/tasks/'.$toClose['id'], ['action' => 'complete'])->assertOk();
+
+            Sanctum::actingAs($supervisor);
+            $this->postJson('/api/v1/promo-plans', [
+                'salesUserId' => $nino->id,
+                'title' => 'ნინოს აქცია',
+                'startsOn' => '2026-09-14',
+                'endsOn' => '2026-09-20',
+            ])->assertCreated();
+            $this->postJson('/api/v1/promo-plans', [
+                'salesUserId' => $davit->id,
+                'title' => 'დავითის აქცია',
+                'startsOn' => '2026-09-14',
+                'endsOn' => '2026-09-20',
+            ])->assertCreated();
+
+            $both = $this->getJson('/api/v1/tasks?status[]=open&status[]=done')->assertOk()->json('data');
+            $this->assertEqualsCanonicalizing([$open['id'], $toClose['id']], collect($both)->pluck('id')->all());
+
+            $onlyOpen = $this->getJson('/api/v1/tasks?status[]=open')->assertOk()->json('data');
+            $this->assertSame([$open['id']], collect($onlyOpen)->pluck('id')->all());
+
+            $oneRep = $this->getJson('/api/v1/tasks?salesUserId[]='.$davit->id)->assertOk()->json('data');
+            $this->assertSame([$toClose['id']], collect($oneRep)->pluck('id')->all());
+
+            $this->getJson('/api/v1/tasks?salesUserId[]=999999')
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'FORBIDDEN_PRESELLER');
+
+            $promos = $this->getJson('/api/v1/promo-plans?salesUserId[]='.$nino->id)->assertOk()->json('data');
+            $this->assertSame(['ნინოს აქცია'], collect($promos)->pluck('title')->all());
+            $this->assertCount(2, $this->getJson('/api/v1/promo-plans')->json('data'));
+
+            $ninoDay = $this->getJson('/api/v1/day?salesUserId[]='.$nino->id)->assertOk()->json('data');
+            $this->assertSame([$visit['id']], collect($ninoDay['visits'])->pluck('id')->all());
+
+            $teamDay = $this->getJson('/api/v1/day')->assertOk()->json('data');
+            $this->assertEqualsCanonicalizing(
+                [$visit['id'], $davitVisit['id']],
+                collect($teamDay['visits'])->pluck('id')->all(),
+            );
+
+            $byPhase = $this->getJson('/api/v1/gallery/photos?phase[]=shelf')->assertOk()->json('data');
+            $this->assertSame([$tagged['id']], collect($byPhase)->pluck('id')->all());
+
+            $byPhases = $this->getJson('/api/v1/gallery/photos?phase[]=shelf&phase[]=before')->assertOk()->json('data');
+            $this->assertEqualsCanonicalizing([$tagged['id'], $plain['id']], collect($byPhases)->pluck('id')->all());
+
+            $byTag = $this->getJson('/api/v1/gallery/photos?tag[]=თარო')->assertOk()->json('data');
+            $this->assertSame([$tagged['id']], collect($byTag)->pluck('id')->all());
+
+            $bySales = $this->getJson('/api/v1/gallery/photos?salesUserId[]='.$davit->id)->assertOk()->json('data');
+            $this->assertSame([], $bySales);
+
+            $this->patchJson('/api/v1/gallery/photos/'.$tagged['id'], [
+                'rating' => 4,
+                'rotation' => 0,
+                'reviewed' => true,
+            ])->assertOk();
+            $byRating = $this->getJson('/api/v1/gallery/photos?rating[]=4&rating[]=5')->assertOk()->json('data');
+            $this->assertSame([$tagged['id']], collect($byRating)->pluck('id')->all());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $extra
      */
+    public function test_my_reports_counts_only_the_signed_in_sales_rep(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-09-16 14:05:00', 'Asia/Tbilisi'));
+
+        try {
+            $superA = User::factory()->create(['role' => UserRole::Supervisor, 'id_gvari' => null, 'name' => 'Sofo A']);
+            $nino = $this->preseller(11, ['supervisor_id' => $superA->id, 'name' => 'Nino']);
+            $davit = $this->preseller(12);
+
+            Sanctum::actingAs($nino);
+            $visit = $this->postJson('/api/v1/visits', ['customerId' => '1001'])->assertCreated()->json('data');
+            $this->post('/api/v1/visit-photos', [
+                'customerId' => '1001',
+                'phase' => 'before',
+                'photo' => UploadedFile::fake()->image('shelf.jpg', 20, 20),
+            ])->assertCreated();
+            $this->patchJson('/api/v1/visits/'.$visit['id'], ['outcome' => 'arrived'])->assertOk();
+            $this->postJson('/api/v1/visit-surveys', [
+                'visitId' => $visit['id'],
+                'shelfStocked' => true,
+                'priceVisible' => false,
+                'promoPresent' => false,
+                'competitorSeen' => true,
+            ])->assertCreated();
+            $this->postJson('/api/v1/collections', [
+                'customerId' => '1001',
+                'amount' => '12.50',
+                'method' => 'cash',
+            ])->assertCreated();
+
+            Sanctum::actingAs($superA);
+            $this->postJson('/api/v1/tasks', [
+                'salesUserId' => $nino->id,
+                'customerId' => '1001',
+                'title' => 'ვადაგასული',
+                'dueOn' => '2026-09-14',
+            ])->assertCreated();
+            $this->postJson('/api/v1/visit-coaching', [
+                'visitId' => $visit['id'],
+                'rating' => 5,
+                'note' => 'სუფთა თარო',
+            ])->assertCreated();
+            $this->getJson('/api/v1/my-reports')->assertForbidden();
+
+            Sanctum::actingAs($davit);
+            $this->postJson('/api/v1/collections', [
+                'customerId' => '2001',
+                'amount' => '99.00',
+                'method' => 'cash',
+            ])->assertCreated();
+            $other = $this->getJson('/api/v1/my-reports?days=7')->assertOk()->json('data');
+            $this->assertSame(0, $other['visits']['finished']);
+            $this->assertEquals(99, $other['money']['collected']);
+            $this->assertSame([], $other['customers']);
+
+            Sanctum::actingAs($nino);
+            $mine = $this->getJson('/api/v1/my-reports?days=30')->assertOk()->json('data');
+            $this->assertSame(30, $mine['days']);
+            $this->assertSame(1, $mine['visits']['finished']);
+            $this->assertCount(30, $mine['visits']['byDay']);
+            $this->assertSame(1, $mine['survey']['count']);
+            $this->assertSame(1, $mine['survey']['shelfStocked']);
+            $this->assertSame(1, $mine['survey']['competitorSeen']);
+            $this->assertSame(1, $mine['photos']['before']);
+            $this->assertSame(1, $mine['tasks']['open']);
+            $this->assertSame(1, $mine['tasks']['overdue']);
+            $this->assertEquals(12.5, $mine['money']['collected']);
+            $this->assertSame('1001', $mine['customers'][0]['customerId']);
+            $this->assertSame(1, $mine['customers'][0]['visits']);
+            $this->assertEquals(5, $mine['coaching']['averageRating']);
+            $this->assertSame('სუფთა თარო', $mine['coaching']['note']);
+            $this->assertSame('Sofo A', $mine['coaching']['supervisorName']);
+
+            $todayReport = $this->getJson('/api/v1/my-reports?days=1')->assertOk()->json('data');
+            $this->assertSame(1, $todayReport['days']);
+            $this->assertCount(1, $todayReport['visits']['byDay']);
+            $this->assertSame(1, $todayReport['visits']['finished']);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     private function preseller(int $idGvari, array $extra = []): User
     {
         return User::factory()->create(array_merge([

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -5,10 +6,13 @@ import { erpApi } from '@/lib/api/erp.api';
 import { Card, Badge, Button, Spinner } from '@/components/ui';
 import { ErpErrorAlert } from '@/components/shared';
 import { ArrowLeft, Banknote, MapPin, Navigation, Package, Percent, Phone, Plus, RotateCcw, TriangleAlert } from 'lucide-react';
-import { googleMapsDirectionsUrl, isPlottableCoord } from '@/lib/utils/geo';
+import { isPlottableCoord } from '@/lib/utils/geo';
 import { formatCurrency } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { useGeolocation } from '@/hooks/useGeolocation';
+import { useRouteDirections } from '@/hooks/useRouteDirections';
 import { CustomerMap } from '../components/CustomerMap';
+import { VisitActions } from '../components/VisitActions';
 import { useAuthStore } from '@/stores/authStore';
 import type { ErpVisitSchedule } from '@/types';
 
@@ -59,6 +63,25 @@ export default function CustomerDetailPage() {
     queryKey: ['erp-customer', id, salesUserId],
     queryFn: () => erpApi.customer(id!, { salesUserId }),
     enabled: !!id,
+  });
+
+  const [routeOn, setRouteOn] = useState(false);
+  const geo = useGeolocation();
+  const pinned = isPlottableCoord(customer?.latitude, customer?.longitude);
+  const directions = useRouteDirections({
+    origin: routeOn && geo.latitude != null && geo.longitude != null ? [geo.latitude, geo.longitude] : null,
+    stops:
+      customer && pinned
+        ? [
+            {
+              id: customer.customerId,
+              name: customer.name,
+              latitude: customer.latitude,
+              longitude: customer.longitude,
+            },
+          ]
+        : [],
+    enabled: routeOn,
   });
 
   if (isError) {
@@ -129,7 +152,7 @@ export default function CustomerDetailPage() {
         {t('customers.backToCustomers', 'Back to Customers')}
       </Button>
 
-      {!isPlottableCoord(customer.latitude, customer.longitude) ? (
+      {!pinned ? (
         <div className="flex items-start gap-2.5 rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning-light)] px-3 py-2.5">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warning)]" />
           <p className="text-sm font-semibold text-[var(--color-warning-fg)]">
@@ -180,36 +203,44 @@ export default function CustomerDetailPage() {
             ) : null}
           </div>
 
-          {isPlottableCoord(customer.latitude, customer.longitude) ? (
+          {pinned ? (
             <>
               <div className="-mx-4 mt-3 sm:-mx-5">
                 <CustomerMap
-                  pins={[
-                    {
-                      id: customer.customerId,
-                      name: customer.name,
-                      latitude: customer.latitude,
-                      longitude: customer.longitude,
-                    },
-                  ]}
-                  heightClass="h-40 rounded-none border-x-0 border-b-0 sm:h-52"
+                  pins={
+                    routeOn
+                      ? []
+                      : [
+                          {
+                            id: customer.customerId,
+                            name: customer.name,
+                            latitude: customer.latitude,
+                            longitude: customer.longitude,
+                          },
+                        ]
+                  }
+                  heightClass="h-52 rounded-none border-x-0 border-b-0 sm:h-64"
                   selectedId={customer.customerId}
+                  directions={routeOn ? directions : null}
                 />
               </div>
               <Button
-                variant="outline"
+                variant={routeOn ? 'primary' : 'outline'}
                 className="mt-3"
+                loading={geo.loading}
                 onClick={() => {
-                  window.open(
-                    googleMapsDirectionsUrl(customer.latitude as string, customer.longitude as string),
-                    '_blank',
-                    'noopener,noreferrer',
-                  );
+                  setRouteOn(true);
+                  geo.getPosition();
                 }}
               >
                 <Navigation className="h-4 w-4" />
                 {t('customers.getDirections', 'Get directions')}
               </Button>
+              {routeOn && geo.error ? (
+                <p className="mt-2 text-sm font-medium text-[var(--color-warning)]">
+                  {t('customers.locationFailed', 'Location could not be found')}
+                </p>
+              ) : null}
             </>
           ) : null}
 
@@ -278,6 +309,8 @@ export default function CustomerDetailPage() {
             </div>
           ) : null}
         </div>
+
+        {isSales ? <VisitActions customerId={customer.customerId} /> : null}
 
         {isSales && (
           <div className="grid grid-cols-2 gap-2 border-b border-[var(--color-border)] px-4 py-3 sm:grid-cols-4 sm:px-5">
