@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Camera, Check, ClipboardList, MapPin, MessageSquareQuote, PackageSearch, Trash2 } from 'lucide-react';
+import { Camera, Check, ClipboardList, MapPin, MessageSquareQuote, PackageSearch } from 'lucide-react';
 import { erpApi } from '@/lib/api/erp.api';
 import { formatVisitClock } from '@/lib/utils/format';
-import { AsyncCombobox, Button, Card, Input, SegmentedControl, StarRating, type ComboboxOption } from '@/components/ui';
+import { Button, Card, Input, SegmentedControl, StarRating } from '@/components/ui';
+import { ShelfStudio } from '@/features/shelf/ShelfStudio';
 import { cn } from '@/lib/utils/cn';
 import type { ErpVisitPhoto } from '@/types';
 
@@ -67,8 +68,6 @@ function phaseLabel(phase: ErpVisitPhoto['phase'], t: (key: string, fallback: st
   return t('customers.photoEnd', 'At the end');
 }
 
-type ShelfStatus = 'present' | 'missing' | 'low';
-
 function Stage({
   step,
   title,
@@ -129,7 +128,8 @@ export function VisitActions({ customerId }: { customerId: string }) {
     competitorSeen: false,
   });
   const [surveySaved, setSurveySaved] = useState(false);
-  const [shelfLines, setShelfLines] = useState<Record<string, { name: string; status: ShelfStatus }>>({});
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [shelfQueued, setShelfQueued] = useState(false);
 
   const visitsQuery = useQuery({
     queryKey: ['erp-visits', { customerId }],
@@ -273,37 +273,6 @@ export function VisitActions({ customerId }: { customerId: string }) {
     },
   });
 
-  const shelfMutation = useMutation({
-    mutationFn: (photoId: number | undefined) =>
-      erpApi.saveShelfAudit({
-        customerId,
-        photoId,
-        lines: Object.entries(shelfLines).map(([itemId, line]) => ({ itemId, status: line.status })),
-      }),
-    onSuccess: async () => {
-      setActionError(null);
-      setShelfLines({});
-      await queryClient.invalidateQueries({ queryKey: ['erp-shelf', customerId] });
-    },
-    onError: (error) => {
-      setActionError(apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.'));
-    },
-  });
-
-  const searchItems = useCallback(
-    async (search: string): Promise<ComboboxOption[]> => {
-      const page = await erpApi
-        .items({ customerId, search: search || undefined, limit: 25 })
-        .catch(() => erpApi.items({ search: search || undefined, limit: 25 }));
-      return page.items.map((item) => ({
-        value: item.itemId,
-        label: item.name,
-        hint: [item.prodCode ?? item.itemId, item.unitName ?? item.unit].filter(Boolean).join(' · '),
-      }));
-    },
-    [customerId],
-  );
-
   const rows = visitsQuery.data ?? [];
   const photos = photosQuery.data ?? [];
   const openHere = rows.find((row) => row.status === 'open' && row.customerId === customerId);
@@ -315,11 +284,9 @@ export function VisitActions({ customerId }: { customerId: string }) {
   );
   const coaching = coachingQuery.data ?? [];
   const latestShelf = shelfQuery.data?.[0];
-  const shelfPhoto = photos.find((photo) => photo.phase === 'shelf');
   const surveyVisit = openHere ?? (latestFinished && isTodayInTbilisi(latestFinished.startedAt) ? latestFinished : null);
   const started = formatVisitClock(openHere?.startedAt ?? null);
   const todayPhotos = photos.filter((photo) => isTodayInTbilisi(photo.takenAt));
-  const shelfPicked = Object.entries(shelfLines);
 
   const onFile = (phase: ErpVisitPhoto['phase'], list: FileList | null) => {
     const file = list?.[0];
@@ -528,77 +495,15 @@ export function VisitActions({ customerId }: { customerId: string }) {
       <Stage
         step={4}
         title={t('shelf.title', 'Shelf audit')}
-        hint={shelfPhoto ? undefined : t('customers.photoShelf', 'Shelf')}
         icon={<PackageSearch className="h-4 w-4" />}
         done={Boolean(latestShelf && isTodayInTbilisi(latestShelf.createdAt))}
       >
-        <AsyncCombobox
-          label={t('shelf.search', 'Search product')}
-          queryKey={['shelf-item-search', customerId]}
-          fetchOptions={searchItems}
-          value={null}
-          onChange={(option) => {
-            if (!option) {
-              return;
-            }
-            setShelfLines((current) => ({
-              ...current,
-              [option.value]: { name: option.label, status: current[option.value]?.status ?? 'present' },
-            }));
-          }}
-          placeholder={t('shelf.empty', 'Pick a product')}
-          searchPlaceholder={t('filters.searchProduct', 'Search product')}
-          emptyText={t('filters.noResults', 'No results')}
-        />
-        {shelfPicked.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-secondary)]">{t('shelf.empty', 'Pick a product')}</p>
-        ) : (
-          <ul className="space-y-2">
-            {shelfPicked.map(([itemId, line]) => (
-              <li key={itemId} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text)]">{line.name}</span>
-                <SegmentedControl
-                  size="sm"
-                  value={line.status}
-                  onChange={(value) =>
-                    setShelfLines((current) => ({
-                      ...current,
-                      [itemId]: { name: line.name, status: value as ShelfStatus },
-                    }))
-                  }
-                  options={[
-                    { value: 'present', label: t('shelf.present', 'On shelf') },
-                    { value: 'low', label: t('shelf.low', 'Low') },
-                    { value: 'missing', label: t('shelf.missing', 'Missing') },
-                  ]}
-                />
-                <button
-                  type="button"
-                  aria-label={t('common.delete', 'Delete')}
-                  onClick={() =>
-                    setShelfLines((current) => {
-                      const next = { ...current };
-                      delete next[itemId];
-                      return next;
-                    })
-                  }
-                  className="rounded-lg p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-danger)]"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Button
-          variant="primary"
-          size="sm"
-          fullWidth
-          disabled={shelfMutation.isPending || shelfPicked.length === 0 || !shelfPhoto}
-          onClick={() => shelfMutation.mutate(shelfPhoto?.id)}
-        >
-          {t('shelf.save', 'Save audit')}
+        <Button variant="primary" size="sm" fullWidth onClick={() => setStudioOpen(true)}>
+          {t('shelf.open', 'Shelf studio')}
         </Button>
+        {shelfQueued ? (
+          <p className="text-xs font-medium text-[var(--color-warning)]">{t('shelf.queued', 'Saved offline')}</p>
+        ) : null}
         {latestShelf ? (
           <p className="text-xs text-[var(--color-text-secondary)]">
             {t('shelf.latest', 'Latest audit')}
@@ -643,6 +548,18 @@ export function VisitActions({ customerId }: { customerId: string }) {
         </p>
       ) : null}
       {actionError ? <p className="text-sm font-medium text-[var(--color-warning)]">{actionError}</p> : null}
+      {studioOpen ? (
+        <ShelfStudio
+          customerId={customerId}
+          onClose={() => setStudioOpen(false)}
+          onSaved={async (queued) => {
+            setShelfQueued(queued);
+            setStudioOpen(false);
+            await queryClient.invalidateQueries({ queryKey: ['erp-shelf', customerId] });
+            await queryClient.invalidateQueries({ queryKey: ['erp-visit-photos', customerId] });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

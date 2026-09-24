@@ -14,7 +14,7 @@ export const comboboxTriggerClass =
   'flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-left text-sm text-[var(--color-text)] transition-all duration-200 hover:border-[var(--color-border-strong)] focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/20 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
 export const comboboxPanelClass =
-  'z-50 w-[var(--radix-popover-trigger-width)] min-w-56 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] animate-in fade-in-0 zoom-in-95';
+  'z-[80] w-[var(--radix-popover-trigger-width)] min-w-56 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] animate-in fade-in-0 zoom-in-95';
 
 export function matchesSearch(option: ComboboxOption, search: string): boolean {
   const needle = search.trim().toLowerCase();

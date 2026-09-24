@@ -1,1 +1,0 @@
-import{a as e,t}from"./jsx-runtime-l7e5u58Y.js";import{t as n}from"./CustomerRouteBoard-Cm3bpG2b.js";import{t as r}from"./authStore-DJRb_JUo.js";var i=t();function a(){return r(e=>e.user?.role)===`sales_rep`?(0,i.jsx)(e,{to:`/customers`,replace:!0}):(0,i.jsx)(n,{teamMode:!0})}export{a as default};

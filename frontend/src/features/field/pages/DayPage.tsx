@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import axios from 'axios';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, CircleDot, MessageSquareQuote, TriangleAlert } from 'lucide-react';
@@ -248,6 +248,14 @@ export default function DayPage() {
                             <CircleDot className="mt-1 h-4 w-4 shrink-0 text-[var(--color-primary)]" />
                           )}
                         </button>
+                        {role === 'supervisor' || role === 'admin' ? (
+                          <Link
+                            to={`/customers/${encodeURIComponent(visit.customerId)}?salesUserId=${visit.salesUserId}`}
+                            className="mt-1 inline-flex px-1 text-xs font-semibold text-[var(--color-primary)]"
+                          >
+                            {t('shelf.planogram', 'Planogram')}
+                          </Link>
+                        ) : null}
                       </li>
                     );
                   })}

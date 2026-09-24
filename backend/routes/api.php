@@ -102,6 +102,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/visit-coaching', [V1FieldWorkController::class, 'storeCoaching']);
         Route::get('/shelf-audits', [V1FieldWorkController::class, 'shelf']);
         Route::post('/shelf-audits', [V1FieldWorkController::class, 'storeShelf']);
+        Route::get('/planograms', [V1FieldWorkController::class, 'planograms']);
+        Route::post('/planograms', [V1FieldWorkController::class, 'storePlanogram']);
+        Route::delete('/planograms/{id}', [V1FieldWorkController::class, 'destroyPlanogram']);
         Route::get('/promo-plans', [V1FieldWorkController::class, 'promos']);
         Route::post('/promo-plans', [V1FieldWorkController::class, 'storePromo']);
         Route::patch('/promo-plans/{id}', [V1FieldWorkController::class, 'updatePromo']);

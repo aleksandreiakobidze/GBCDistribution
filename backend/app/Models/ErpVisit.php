@@ -48,6 +48,7 @@ class ErpVisit extends Model
     {
         return [
             'id' => $this->id,
+            'salesUserId' => (int) $this->user_id,
             'customerId' => (string) $this->customer_id,
             'customerName' => $this->customer_name,
             'status' => (string) $this->status,

@@ -279,6 +279,7 @@ export interface ErpGalleryPhoto extends ErpVisitPhoto {
 
 export interface ErpVisit {
   id: number;
+  salesUserId: number;
   customerId: string;
   customerName: string | null;
   status: 'open' | 'arrived' | 'missed';
@@ -338,7 +339,28 @@ export interface ErpShelfAudit {
   visitId: number | null;
   photoId: number | null;
   createdAt: string | null;
-  lines: Array<{ itemId: string; itemName: string | null; status: 'present' | 'missing' | 'low' }>;
+  lines: Array<{
+    itemId: string;
+    itemName: string | null;
+    status: 'present' | 'missing' | 'low';
+    shelfNo: number | null;
+    facings: number;
+    readPrice: number | null;
+    competitor: boolean;
+    box: { x: number; y: number; w: number; h: number } | null;
+  }>;
+}
+
+export interface ErpPlanogramLine {
+  id: number;
+  customerId: string | null;
+  orgCategoryId: number | null;
+  shelfNo: number;
+  position: number;
+  itemId: string;
+  itemName: string | null;
+  facings: number;
+  targetPrice: number | null;
 }
 
 export interface ErpPromoPlan {

@@ -107,9 +107,53 @@ class FieldWorkController extends V1Controller
             'lines' => ['required', 'array', 'min:1', 'max:40'],
             'lines.*.itemId' => ['required', 'string', 'max:32'],
             'lines.*.status' => ['required', 'in:present,missing,low'],
+            'lines.*.itemName' => ['nullable', 'string', 'max:160'],
+            'lines.*.shelfNo' => ['nullable', 'integer', 'min:1', 'max:20'],
+            'lines.*.facings' => ['nullable', 'integer', 'min:0', 'max:40'],
+            'lines.*.readPrice' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.competitor' => ['nullable', 'boolean'],
+            'lines.*.boxX' => ['nullable', 'numeric', 'between:0,1'],
+            'lines.*.boxY' => ['nullable', 'numeric', 'between:0,1'],
+            'lines.*.boxW' => ['nullable', 'numeric', 'between:0,1'],
+            'lines.*.boxH' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
         return $this->ok($field->saveShelf($this->user($request), $data), 201);
+    }
+
+    public function planograms(Request $request, FieldWorkService $field): JsonResponse
+    {
+        return $this->ok($field->listPlanogram(
+            $this->user($request),
+            $request->query('customerId') ? (string) $request->query('customerId') : null,
+            $request->query('orgCategoryId') !== null && $request->query('orgCategoryId') !== ''
+                ? (int) $request->query('orgCategoryId')
+                : null,
+            $request->boolean('stored'),
+        ));
+    }
+
+    public function storePlanogram(Request $request, FieldWorkService $field): JsonResponse
+    {
+        $data = $request->validate([
+            'customerId' => ['nullable', 'string', 'max:32', 'required_without:orgCategoryId', 'prohibits:orgCategoryId'],
+            'orgCategoryId' => ['nullable', 'integer', 'min:1', 'required_without:customerId', 'prohibits:customerId'],
+            'shelfNo' => ['required', 'integer', 'min:1', 'max:20'],
+            'position' => ['required', 'integer', 'min:1', 'max:200'],
+            'itemId' => ['required', 'string', 'max:32'],
+            'itemName' => ['nullable', 'string', 'max:160'],
+            'facings' => ['nullable', 'integer', 'min:1', 'max:40'],
+            'targetPrice' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        return $this->ok($field->savePlanogram($this->user($request), $data), 201);
+    }
+
+    public function destroyPlanogram(Request $request, FieldWorkService $field, int $id): JsonResponse
+    {
+        $field->deletePlanogram($this->user($request), $id);
+
+        return $this->ok(['deleted' => true]);
     }
 
     public function promos(Request $request, FieldWorkService $field): JsonResponse

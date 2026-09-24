@@ -16,6 +16,7 @@ import type {
   ErpVisitSurvey,
   ErpVisitCoaching,
   ErpShelfAudit,
+  ErpPlanogramLine,
   ErpPromoPlan,
   ErpDayReport,
   ErpFieldDashboard,
@@ -96,6 +97,7 @@ export const erpApi = {
 
   items: async (params?: {
     customerId?: string;
+    salesUserId?: number;
     search?: string;
     cursor?: string;
     limit?: number;
@@ -413,10 +415,46 @@ export const erpApi = {
   saveShelfAudit: async (payload: {
     customerId: string;
     photoId?: number;
-    lines: Array<{ itemId: string; status: 'present' | 'missing' | 'low' }>;
+    lines: Array<{
+      itemId: string;
+      status: 'present' | 'missing' | 'low';
+      shelfNo?: number | null;
+      facings?: number;
+      readPrice?: number | null;
+      competitor?: boolean;
+      itemName?: string | null;
+      boxX?: number | null;
+      boxY?: number | null;
+      boxW?: number | null;
+      boxH?: number | null;
+    }>;
   }) => {
     const { data } = await apiClient.post('/v1/shelf-audits', payload);
     return unwrap(data) as ErpShelfAudit;
+  },
+
+  planograms: async (params: { customerId?: string; orgCategoryId?: number; stored?: boolean }) => {
+    const { data } = await apiClient.get('/v1/planograms', { params });
+    return unwrap(data) as ErpPlanogramLine[];
+  },
+
+  savePlanogram: async (payload: {
+    customerId?: string;
+    orgCategoryId?: number;
+    shelfNo: number;
+    position: number;
+    itemId: string;
+    itemName?: string | null;
+    facings?: number;
+    targetPrice?: number | null;
+  }) => {
+    const { data } = await apiClient.post('/v1/planograms', payload);
+    return unwrap(data) as ErpPlanogramLine;
+  },
+
+  deletePlanogram: async (id: number) => {
+    const { data } = await apiClient.delete(`/v1/planograms/${id}`);
+    return unwrap(data) as { deleted: boolean };
   },
 
   promoPlans: async (params?: {

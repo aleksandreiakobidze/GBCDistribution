@@ -7,6 +7,7 @@ use App\Erp\Contracts\ErpProvider;
 use App\Erp\Exceptions\ErpException;
 use App\Erp\Support\TbilisiClock;
 use App\Erp\Support\TeamAccess;
+use App\Models\ErpPlanogramLine;
 use App\Models\ErpPromoPlan;
 use App\Models\ErpShelfAudit;
 use App\Models\ErpShelfAuditLine;
@@ -19,6 +20,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 final class FieldWorkService
 {
@@ -197,7 +199,7 @@ final class FieldWorkService
     }
 
     /**
-     * @param  array{customerId: string, photoId?: int|null, lines: list<array{itemId: string, status: string}>}  $input
+     * @param  array{customerId: string, photoId?: int|null, lines: list<array<string, mixed>>}  $input
      * @return array<string, mixed>
      */
     public function saveShelf(User $actor, array $input): array
@@ -217,26 +219,56 @@ final class FieldWorkService
             $visitId = $photo->visit_id;
         }
 
-        $audit = ErpShelfAudit::query()->create([
-            'user_id' => $actor->id,
-            'id_gvari' => (int) $actor->id_gvari,
-            'customer_id' => $customerId,
-            'customer_name' => $customer->name,
-            'visit_id' => $visitId,
-            'photo_id' => $photoId ?: null,
-        ]);
-
-        foreach ($input['lines'] as $line) {
-            $item = $this->erp->products()->getForCustomer((int) $actor->id_gvari, $customer, (string) $line['itemId']);
-            ErpShelfAuditLine::query()->create([
-                'audit_id' => $audit->id,
-                'item_id' => $item->itemId,
-                'item_name' => $item->name,
-                'status' => (string) $line['status'],
+        return DB::transaction(function () use ($actor, $input, $customer, $customerId, $photoId, $visitId) {
+            $audit = ErpShelfAudit::query()->create([
+                'user_id' => $actor->id,
+                'id_gvari' => (int) $actor->id_gvari,
+                'customer_id' => $customerId,
+                'customer_name' => $customer->name,
+                'visit_id' => $visitId,
+                'photo_id' => $photoId ?: null,
             ]);
-        }
 
-        return $audit->fresh(['user', 'lines'])->toApiArray();
+            foreach ($input['lines'] as $line) {
+                $competitor = ! empty($line['competitor']);
+                if ($competitor) {
+                    ErpShelfAuditLine::query()->create([
+                        'audit_id' => $audit->id,
+                        'item_id' => 'competitor',
+                        'item_name' => $this->blank($line['itemName'] ?? null) ?? 'სხვისი',
+                        'status' => ErpShelfAuditLine::PRESENT,
+                        'shelf_no' => $this->shelfNo($line),
+                        'facings' => $this->facings($line),
+                        'read_price' => $this->money($line['readPrice'] ?? null),
+                        'box_x' => $this->unit($line['boxX'] ?? null),
+                        'box_y' => $this->unit($line['boxY'] ?? null),
+                        'box_w' => $this->unit($line['boxW'] ?? null),
+                        'box_h' => $this->unit($line['boxH'] ?? null),
+                        'competitor' => true,
+                    ]);
+
+                    continue;
+                }
+
+                $item = $this->erp->products()->getForCustomer((int) $actor->id_gvari, $customer, (string) $line['itemId']);
+                ErpShelfAuditLine::query()->create([
+                    'audit_id' => $audit->id,
+                    'item_id' => $item->itemId,
+                    'item_name' => $item->name,
+                    'status' => (string) $line['status'],
+                    'shelf_no' => $this->shelfNo($line),
+                    'facings' => $this->facings($line),
+                    'read_price' => $this->money($line['readPrice'] ?? null),
+                    'box_x' => $this->unit($line['boxX'] ?? null),
+                    'box_y' => $this->unit($line['boxY'] ?? null),
+                    'box_w' => $this->unit($line['boxW'] ?? null),
+                    'box_h' => $this->unit($line['boxH'] ?? null),
+                    'competitor' => false,
+                ]);
+            }
+
+            return $audit->fresh(['user', 'lines'])->toApiArray();
+        });
     }
 
     /**
@@ -252,6 +284,80 @@ final class FieldWorkService
         return $query->orderByDesc('id')->limit(20)->get()
             ->map(fn (ErpShelfAudit $row) => $row->toApiArray())
             ->all();
+    }
+
+    /**
+     * Customer rows replace a category row for the same product and shelf.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listPlanogram(User $actor, ?string $customerId, ?int $orgCategoryId, bool $stored): array
+    {
+        if (TeamAccess::role($actor) === UserRole::SalesRep) {
+            if ($customerId === null || $customerId === '') {
+                TeamAccess::deny();
+            }
+            $customer = $this->erp->customers()->getAuthorized((int) $actor->id_gvari, $customerId);
+
+            return $this->effectivePlan($customerId, (int) $customer->idOrgCategory);
+        }
+
+        TeamAccess::assertSupervisor($actor);
+        if ($customerId !== null && $customerId !== '') {
+            if ($stored || $orgCategoryId === null) {
+                return $this->planRows(ErpPlanogramLine::query()->where('customer_id', $customerId));
+            }
+
+            return $this->effectivePlan($customerId, $orgCategoryId);
+        }
+        if ($orgCategoryId === null) {
+            throw new ErpException('PLANOGRAM_SCOPE', 'კლიენტი ან კატეგორია სჭირდება.', 422);
+        }
+
+        return $this->planRows(
+            ErpPlanogramLine::query()->whereNull('customer_id')->where('org_category_id', $orgCategoryId),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    public function savePlanogram(User $actor, array $input): array
+    {
+        TeamAccess::assertSupervisor($actor);
+        $customerId = $this->blank($input['customerId'] ?? null);
+        $orgCategoryId = isset($input['orgCategoryId']) ? (int) $input['orgCategoryId'] : null;
+        if ($orgCategoryId === 0) {
+            $orgCategoryId = null;
+        }
+        if (($customerId === null) === ($orgCategoryId === null)) {
+            throw new ErpException('PLANOGRAM_SCOPE', 'კლიენტი ან კატეგორია სჭირდება.', 422);
+        }
+
+        $row = ErpPlanogramLine::query()->create([
+            'customer_id' => $customerId,
+            'org_category_id' => $customerId === null ? $orgCategoryId : null,
+            'shelf_no' => (int) $input['shelfNo'],
+            'position' => (int) $input['position'],
+            'item_id' => (string) $input['itemId'],
+            'item_name' => $this->blank($input['itemName'] ?? null),
+            'facings' => max(1, (int) ($input['facings'] ?? 1)),
+            'target_price' => $this->money($input['targetPrice'] ?? null),
+            'created_by' => $actor->id,
+        ]);
+
+        return $row->toApiArray();
+    }
+
+    public function deletePlanogram(User $actor, int $id): void
+    {
+        TeamAccess::assertSupervisor($actor);
+        $row = ErpPlanogramLine::query()->find($id);
+        if (! $row) {
+            throw new ErpException('PLANOGRAM_NOT_FOUND', 'პლანოგრამა ვერ მოიძებნა.', 404);
+        }
+        $row->delete();
     }
 
     /**
@@ -487,6 +593,100 @@ final class FieldWorkService
             $now->copy()->endOfDay()->format('Y-m-d H:i:s'),
             $now->toDateString(),
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function effectivePlan(string $customerId, int $orgCategoryId): array
+    {
+        $customerRows = ErpPlanogramLine::query()
+            ->where('customer_id', $customerId)
+            ->orderBy('shelf_no')
+            ->orderBy('position')
+            ->get();
+        $categoryRows = ErpPlanogramLine::query()
+            ->whereNull('customer_id')
+            ->where('org_category_id', $orgCategoryId)
+            ->orderBy('shelf_no')
+            ->orderBy('position')
+            ->get();
+
+        $used = [];
+        $merged = [];
+        foreach ($customerRows as $row) {
+            $used[$row->item_id.'|'.$row->shelf_no] = true;
+            $merged[] = $row;
+        }
+        foreach ($categoryRows as $row) {
+            if (isset($used[$row->item_id.'|'.$row->shelf_no])) {
+                continue;
+            }
+            $merged[] = $row;
+        }
+        usort($merged, fn (ErpPlanogramLine $a, ErpPlanogramLine $b) => [$a->shelf_no, $a->position, $a->id] <=> [$b->shelf_no, $b->position, $b->id]);
+
+        return array_map(fn (ErpPlanogramLine $row) => $row->toApiArray(), $merged);
+    }
+
+    /**
+     * @param  Builder<ErpPlanogramLine>  $query
+     * @return list<array<string, mixed>>
+     */
+    private function planRows(Builder $query): array
+    {
+        return $query->orderBy('shelf_no')->orderBy('position')->orderBy('id')->get()
+            ->map(fn (ErpPlanogramLine $row) => $row->toApiArray())
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    private function shelfNo(array $line): ?int
+    {
+        if (! isset($line['shelfNo']) || $line['shelfNo'] === null || $line['shelfNo'] === '') {
+            return null;
+        }
+
+        return (int) $line['shelfNo'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    private function facings(array $line): int
+    {
+        if (! isset($line['facings']) || $line['facings'] === null || $line['facings'] === '') {
+            return 1;
+        }
+
+        return max(0, (int) $line['facings']);
+    }
+
+    private function money(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return number_format((float) $value, 4, '.', '');
+    }
+
+    private function unit(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $number = (float) $value;
+        if ($number < 0) {
+            $number = 0;
+        }
+        if ($number > 1) {
+            $number = 1;
+        }
+
+        return number_format($number, 4, '.', '');
     }
 
     private function blank(mixed $value): ?string

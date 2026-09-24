@@ -15,7 +15,22 @@ class ErpShelfAuditLine extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['audit_id', 'item_id', 'item_name', 'status'];
+    protected $fillable = [
+        'audit_id', 'item_id', 'item_name', 'status',
+        'shelf_no', 'facings', 'read_price',
+        'box_x', 'box_y', 'box_w', 'box_h', 'competitor',
+    ];
+
+    protected $casts = [
+        'shelf_no' => 'integer',
+        'facings' => 'integer',
+        'read_price' => 'float',
+        'box_x' => 'float',
+        'box_y' => 'float',
+        'box_w' => 'float',
+        'box_h' => 'float',
+        'competitor' => 'boolean',
+    ];
 
     public function audit(): BelongsTo
     {

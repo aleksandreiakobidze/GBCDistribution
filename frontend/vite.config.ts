@@ -46,6 +46,15 @@ export default defineConfig({
             },
           },
           {
+            urlPattern: /\/models\/shelf\.onnx$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'shelf-model',
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             urlPattern: /^https?:\/\/.*\/api\/customers/,
             handler: 'NetworkFirst',
             options: {

@@ -13,6 +13,7 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useRouteDirections } from '@/hooks/useRouteDirections';
 import { CustomerMap } from '../components/CustomerMap';
 import { VisitActions } from '../components/VisitActions';
+import { PlanogramEditor } from '@/features/shelf/PlanogramEditor';
 import { useAuthStore } from '@/stores/authStore';
 import type { ErpVisitSchedule } from '@/types';
 
@@ -311,6 +312,16 @@ export default function CustomerDetailPage() {
         </div>
 
         {isSales ? <VisitActions customerId={customer.customerId} /> : null}
+        {!isSales && (role === 'supervisor' || role === 'admin') ? (
+          <div className="px-4 py-3 sm:px-5">
+            <PlanogramEditor
+              customerId={customer.customerId}
+              orgCategoryId={customer.idOrgCategory}
+              orgCategory={customer.orgCategory}
+              salesUserId={salesUserId}
+            />
+          </div>
+        ) : null}
 
         {isSales && (
           <div className="grid grid-cols-2 gap-2 border-b border-[var(--color-border)] px-4 py-3 sm:grid-cols-4 sm:px-5">

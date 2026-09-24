@@ -1440,6 +1440,41 @@ class V1ErpIsolationTest extends TestCase
             ])->assertCreated()->json('data');
             $this->assertSame('present', $audit['lines'][0]['status']);
             $this->assertSame($photo['id'], $audit['photoId']);
+            $this->assertSame(1, $audit['lines'][0]['facings']);
+            $this->assertNull($audit['lines'][0]['shelfNo']);
+            $this->assertNull($audit['lines'][0]['readPrice']);
+            $this->assertFalse($audit['lines'][0]['competitor']);
+            $this->assertNull($audit['lines'][0]['box']);
+
+            $this->postJson('/api/v1/planograms', [
+                'customerId' => '1001',
+                'shelfNo' => 1,
+                'position' => 1,
+                'itemId' => '0001',
+                'itemName' => 'წყალი',
+                'facings' => 2,
+            ])->assertStatus(403);
+
+            Sanctum::actingAs($superA);
+            $plan = $this->postJson('/api/v1/planograms', [
+                'customerId' => '1001',
+                'shelfNo' => 1,
+                'position' => 1,
+                'itemId' => '0001',
+                'itemName' => 'წყალი',
+                'facings' => 2,
+                'targetPrice' => 1.5,
+            ])->assertCreated()->json('data');
+            $this->assertSame(2, $plan['facings']);
+            $this->assertSame('1001', $plan['customerId']);
+
+            Sanctum::actingAs($nino);
+            $seenPlan = $this->getJson('/api/v1/planograms?customerId=1001')->assertOk()->json('data');
+            $this->assertSame('0001', $seenPlan[0]['itemId']);
+            $this->assertSame(1, $seenPlan[0]['shelfNo']);
+
+            Sanctum::actingAs($davit);
+            $this->getJson('/api/v1/planograms?customerId=1001')->assertStatus(404);
 
             Sanctum::actingAs($superB);
             $this->assertSame([], $this->getJson('/api/v1/shelf-audits')->json('data'));

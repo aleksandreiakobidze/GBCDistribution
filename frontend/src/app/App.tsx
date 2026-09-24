@@ -5,6 +5,7 @@ import { useUiStore } from '@/stores/uiStore';
 import { AuthGuard } from './AuthGuard';
 import { AppShell } from '@/components/layout/AppShell';
 import { Spinner } from '@/components/ui';
+import { ShelfSync } from '@/features/shelf/ShelfSync';
 
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
@@ -73,6 +74,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeInit />
+      <ShelfSync />
       <BrowserRouter>
         <Suspense fallback={<PageLoader />}>
           <Routes>
