@@ -10,6 +10,7 @@ import type {
   ErpSubmittedOrder,
   ErpCollection,
   ErpVisit,
+  FieldRules,
   ErpVisitPhoto,
   ErpGalleryPhoto,
   ErpTask,
@@ -24,6 +25,7 @@ import type {
   ErpProductReturn,
   ErpSavedOrder,
   ErpPromotion,
+  ErpWarehouse,
 } from '@/types';
 
 function unwrap<T>(payload: { data: T }): T {
@@ -58,6 +60,30 @@ function decodeArrayBufferError(error: unknown): unknown {
   return error;
 }
 
+export interface MonitoringOrderSummary {
+  id: number;
+  savedAt: string | null;
+  orgName: string;
+  idOrg: string;
+  salesName: string;
+  saverName: string;
+  address: string;
+  systemDebt: number;
+  actualDebt: number;
+}
+
+export interface MonitoringOrderLine {
+  source: string;
+  idProd: string | null;
+  name: string;
+  systemQty: number | null;
+  actualQty: number;
+}
+
+export interface MonitoringOrderDetail extends MonitoringOrderSummary {
+  lines: MonitoringOrderLine[];
+}
+
 export const erpApi = {
   me: async () => {
     const { data } = await apiClient.get('/v1/me');
@@ -69,7 +95,54 @@ export const erpApi = {
       presellerId: string | null;
       presellerMapped: boolean;
       provider: string;
+      fieldRules: FieldRules;
+      menus: string[];
     };
+  },
+
+  fieldSettings: async () => {
+    const { data } = await apiClient.get('/v1/field-settings');
+    return unwrap(data) as FieldRules;
+  },
+
+  updateFieldSettings: async (rules: FieldRules) => {
+    const { data } = await apiClient.put('/v1/field-settings', rules);
+    return unwrap(data) as FieldRules;
+  },
+
+  adminUsers: async () => {
+    const { data } = await apiClient.get('/v1/admin/users');
+    return unwrap(data) as Array<{ id: number; name: string; email: string; role: string; idGvari: number | null }>;
+  },
+
+  createAdminUser: async (body: { name: string; email: string; password: string; role: string; idGvari?: number | null }) => {
+    const { data } = await apiClient.post('/v1/admin/users', body);
+    return unwrap(data) as { id: number; name: string; email: string; role: string; idGvari: number | null };
+  },
+
+  updateAdminUser: async (id: number, body: { name: string; email: string; role: string }) => {
+    const { data } = await apiClient.patch(`/v1/admin/users/${id}`, body);
+    return unwrap(data) as { id: number; name: string; email: string; role: string; idGvari: number | null };
+  },
+
+  adminRoles: async () => {
+    const { data } = await apiClient.get('/v1/admin/roles');
+    return unwrap(data) as string[];
+  },
+
+  createAdminRole: async (name: string) => {
+    const { data } = await apiClient.post('/v1/admin/roles', { name });
+    return unwrap(data) as string[];
+  },
+
+  adminRoleMenus: async (role: string) => {
+    const { data } = await apiClient.get(`/v1/admin/roles/${encodeURIComponent(role)}/menus`);
+    return unwrap(data) as string[];
+  },
+
+  updateAdminRoleMenus: async (role: string, menus: string[]) => {
+    const { data } = await apiClient.put(`/v1/admin/roles/${encodeURIComponent(role)}/menus`, { menus });
+    return unwrap(data) as string[];
   },
 
   customers: async (params?: {
@@ -95,6 +168,55 @@ export const erpApi = {
     return unwrap(data) as Array<{ id: number; name: string; presellerId: string }>;
   },
 
+  monitoringReps: async () => {
+    const { data } = await apiClient.get('/v1/monitoring/reps');
+    return unwrap(data) as Array<{ id: number; name: string; presellerId: string }>;
+  },
+
+  monitoringOrgs: async (userId: number) => {
+    const { data } = await apiClient.get('/v1/monitoring/orgs', { params: { userId } });
+    return unwrap(data) as Array<{
+      idOrg: string;
+      name: string;
+      debt: number;
+      address: string;
+      latitude: number | null;
+      longitude: number | null;
+      lastOrderAt: string | null;
+    }>;
+  },
+
+  monitoringOrgCard: async (idOrg: string, userId: number) => {
+    const { data } = await apiClient.get('/v1/monitoring/orgs/card', { params: { idOrg, userId } });
+    return unwrap(data) as {
+      idOrg: string;
+      name: string;
+      debt: number;
+      stock: Array<{ idProd: string; name: string; qty: number }>;
+    };
+  },
+
+  monitoringOrders: async () => {
+    const { data } = await apiClient.get('/v1/monitoring/orders');
+    return unwrap(data) as MonitoringOrderSummary[];
+  },
+
+  monitoringOrder: async (id: number) => {
+    const { data } = await apiClient.get(`/v1/monitoring/orders/${id}`);
+    return unwrap(data) as MonitoringOrderDetail;
+  },
+
+  saveMonitoringOrder: async (body: {
+    userId: number;
+    idOrg: string;
+    actualDebt: number;
+    lines: Array<{ idProd: string; name: string; actualQty: number }>;
+    added: Array<{ name: string; qty: number }>;
+  }) => {
+    const { data } = await apiClient.post('/v1/monitoring/orders', body);
+    return unwrap(data) as MonitoringOrderDetail;
+  },
+
   items: async (params?: {
     customerId?: string;
     salesUserId?: number;
@@ -105,14 +227,18 @@ export const erpApi = {
     prodT?: string;
     prodG?: string;
     category?: string;
+    mode?: 'sale' | 'return';
   }) => {
     const { data } = await apiClient.get('/v1/items', { params });
     return unwrap(data) as ErpCursorPage<ErpItem>;
   },
 
-  item: async (itemId: string, customerId?: string) => {
+  item: async (itemId: string, customerId?: string, mode?: 'sale' | 'return') => {
     const { data } = await apiClient.get(`/v1/items/${encodeURIComponent(itemId)}`, {
-      params: customerId ? { customerId } : undefined,
+      params: {
+        ...(customerId ? { customerId } : {}),
+        ...(mode ? { mode } : {}),
+      },
     });
     return unwrap(data) as ErpItem;
   },
@@ -310,6 +436,11 @@ export const erpApi = {
     return unwrap(data) as ErpCollection;
   },
 
+  warehouses: async () => {
+    const { data } = await apiClient.get('/v1/warehouses');
+    return unwrap(data) as { items: ErpWarehouse[] };
+  },
+
   productReturns: async (customerId?: string) => {
     const { data } = await apiClient.get('/v1/product-returns', {
       params: customerId ? { customerId } : undefined,
@@ -324,6 +455,7 @@ export const erpApi = {
 
   createProductReturn: async (payload: {
     customerId: string;
+    warehouseId: string;
     note?: string;
     lines: Array<{ itemId: string; quantity: string; reason: string }>;
   }) => {
@@ -335,6 +467,7 @@ export const erpApi = {
     id: number,
     payload: {
       customerId?: string;
+      warehouseId?: string;
       note?: string;
       lines: Array<{ itemId: string; quantity: string; reason: string }>;
     },

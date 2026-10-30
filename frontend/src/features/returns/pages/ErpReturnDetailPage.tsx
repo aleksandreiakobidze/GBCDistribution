@@ -75,6 +75,11 @@ export default function ErpReturnDetailPage() {
           {t('customers.orgCode', 'Code')} {row.customerId}
           {row.createdAt ? ` · ${formatDateTime(row.createdAt)}` : ''}
         </p>
+        {row.warehouseName || row.warehouseId ? (
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+            {t('customers.returnWarehouse', 'Warehouse')}: {row.warehouseName || row.warehouseId}
+          </p>
+        ) : null}
         <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
           {t('customers.returnHint', 'This return stays in the app for this customer. FMG is not changed.')}
         </p>

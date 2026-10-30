@@ -1,6 +1,8 @@
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils/cn';
+import { menuKeyForPath } from '@/lib/menu';
 import { useUiStore } from '@/stores/uiStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
 import { Header } from './Header';
@@ -32,8 +34,8 @@ export function AppShell() {
 
         {/* Page content — definite height so picker pages can fill leftover space */}
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 pb-20 md:p-6 md:pb-6">
-          <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
-            <Outlet />
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+            <MenuGate />
           </div>
         </main>
 
@@ -45,6 +47,20 @@ export function AppShell() {
       <MobileSidebarOverlay />
     </div>
   );
+}
+
+function MenuGate() {
+  const { pathname } = useLocation();
+  const user = useAuthStore((state) => state.user);
+  const key = menuKeyForPath(pathname);
+  if (!user || user.menus === undefined || key === null) {
+    return <Outlet />;
+  }
+  const allowed = (user.role === 'admin' && key === 'settings') || user.menus.includes(key);
+  if (!allowed) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <Outlet />;
 }
 
 function MobileSidebarOverlay() {

@@ -9,6 +9,12 @@ import { ShelfSync } from '@/features/shelf/ShelfSync';
 
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
+const FieldSettingsPage = lazy(() => import('@/features/settings/pages/FieldSettingsPage'));
+const PlanPage = lazy(() => import('@/features/plan/pages/PlanPage'));
+const MonitoringPage = lazy(() => import('@/features/monitoring/pages/MonitoringPage'));
+const MonitoringOrdersPage = lazy(() => import('@/features/monitoring/pages/MonitoringOrdersPage'));
+const MonitoringOrderPage = lazy(() => import('@/features/monitoring/pages/MonitoringOrderPage'));
+const MonitoringOrgPage = lazy(() => import('@/features/monitoring/pages/MonitoringOrgPage'));
 const ProfilePage = lazy(() => import('@/features/auth/pages/ProfilePage'));
 const ProductListPage = lazy(() => import('@/features/products/pages/ProductListPage'));
 const ProductDetailPage = lazy(() => import('@/features/products/pages/ProductDetailPage'));
@@ -85,6 +91,12 @@ export default function App() {
             <Route element={<AuthGuard />}>
               <Route element={<AppShell />}>
                 <Route index element={<DashboardPage />} />
+                <Route path="settings" element={<FieldSettingsPage />} />
+                <Route path="plan" element={<PlanPage />} />
+                <Route path="monitoring/orders/:orderId" element={<MonitoringOrderPage />} />
+                <Route path="monitoring/orders" element={<MonitoringOrdersPage />} />
+                <Route path="monitoring/:userId/:idOrg" element={<MonitoringOrgPage />} />
+                <Route path="monitoring" element={<MonitoringPage />} />
 
                 <Route path="products" element={<ProductListPage />} />
                 <Route path="products/:id" element={<ProductDetailPage />} />

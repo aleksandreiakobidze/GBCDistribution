@@ -40,7 +40,7 @@ export default function DayPage() {
   const [rating, setRating] = useState(3);
   const [note, setNote] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
-  const supervisor = role === 'admin' || role === 'supervisor';
+  const supervisor = role === 'admin' || role === 'supervisor' || role === 'manager';
 
   const teamQuery = useQuery({
     queryKey: ['erp-team-reps'],
@@ -248,7 +248,7 @@ export default function DayPage() {
                             <CircleDot className="mt-1 h-4 w-4 shrink-0 text-[var(--color-primary)]" />
                           )}
                         </button>
-                        {role === 'supervisor' || role === 'admin' ? (
+                        {role === 'supervisor' || role === 'manager' || role === 'admin' ? (
                           <Link
                             to={`/customers/${encodeURIComponent(visit.customerId)}?salesUserId=${visit.salesUserId}`}
                             className="mt-1 inline-flex px-1 text-xs font-semibold text-[var(--color-primary)]"

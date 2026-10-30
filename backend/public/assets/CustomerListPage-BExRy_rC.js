@@ -1,0 +1,1 @@
+import{a as e,t}from"./jsx-runtime-l7e5u58Y.js";import{t as n}from"./CustomerRouteBoard-BldPaLVc.js";import{t as r}from"./authStore-DJRb_JUo.js";var i=t();function a(){let t=r(e=>e.user?.role);return t===`supervisor`||t===`manager`?(0,i.jsx)(e,{to:`/routes`,replace:!0}):(0,i.jsx)(n,{})}export{a as default};

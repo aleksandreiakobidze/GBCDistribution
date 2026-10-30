@@ -37,6 +37,7 @@ export default function CreateErpReturnPage() {
   const [pickedCustomerId, setPickedCustomerId] = useState(routeCustomerId);
   const [step, setStep] = useState<ReturnStep>('products');
   const [note, setNote] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [lines, setLines] = useState<ReturnLineDraft[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
@@ -71,6 +72,22 @@ export default function CreateErpReturnPage() {
     retry: false,
   });
 
+  const warehousesQuery = useQuery({
+    queryKey: ['erp-warehouses'],
+    queryFn: () => erpApi.warehouses(),
+    enabled: customerId !== '',
+    retry: false,
+  });
+
+  const warehouseOptions = useMemo(
+    () =>
+      (warehousesQuery.data?.items ?? []).map((row) => ({
+        value: row.id,
+        label: row.name,
+      })),
+    [warehousesQuery.data],
+  );
+
   const reasonOptions = RETURN_REASONS.map((reason) => ({
     value: reason,
     label: t(`customers.reasons.${reason}`, reason),
@@ -99,6 +116,7 @@ export default function CreateErpReturnPage() {
     mutationFn: () => {
       const payload = {
         customerId,
+        warehouseId,
         note: note.trim() || undefined,
         lines: lines.map((line) => ({
           itemId: line.itemId,
@@ -124,6 +142,7 @@ export default function CreateErpReturnPage() {
     }
     const row = existingQuery.data;
     setNote(row.note ?? '');
+    setWarehouseId(row.warehouseId ?? '');
     setLines(
       row.lines.map((line) => ({
         itemId: line.itemId,
@@ -136,6 +155,13 @@ export default function CreateErpReturnPage() {
     );
     setHydrated(true);
   }, [existingQuery.data, hydrated, isReturnEdit]);
+
+  useEffect(() => {
+    if (warehouseId !== '' || warehouseOptions.length !== 1) {
+      return;
+    }
+    setWarehouseId(warehouseOptions[0].value);
+  }, [warehouseId, warehouseOptions]);
 
   function handleAddProduct(product: ErpItem, quantity = '1') {
     const addQty = Math.max(1, Math.round(parseFloat(quantity) || 1));
@@ -182,7 +208,11 @@ export default function CreateErpReturnPage() {
     });
   }
 
-  const canSubmit = lines.length > 0 && lines.every((line) => Number(line.quantity) > 0) && !returnMutation.isPending;
+  const canSubmit =
+    lines.length > 0
+    && lines.every((line) => Number(line.quantity) > 0)
+    && warehouseId !== ''
+    && !returnMutation.isPending;
   const steps = [
     { key: 'products' as const, label: t('products.title', 'Products'), done: lines.length > 0 },
     { key: 'review' as const, label: t('orders.review', 'Review'), done: false },
@@ -358,11 +388,25 @@ export default function CreateErpReturnPage() {
 
       {step === 'products' && (
         <Card className="flex min-h-0 flex-1 flex-col gap-2 !p-3 sm:!p-4">
+          <Select
+            label={t('customers.returnWarehouse', 'საწყობი')}
+            options={warehouseOptions}
+            value={warehouseId || undefined}
+            onChange={setWarehouseId}
+            placeholder={t('customers.returnWarehouseRequired', 'აირჩიეთ საწყობი')}
+          />
+          {warehousesQuery.isError ? (
+            <ErpErrorAlert
+              error={warehousesQuery.error}
+              fallback={t('customers.returnWarehouseRequired', 'აირჩიეთ საწყობი')}
+            />
+          ) : null}
           <ProductPicker
             customerId={customerId}
             quantityMode="pieces"
             allowUnpriced
-            fallbackCatalog
+            showPromotions={false}
+            assortmentMode="return"
             items={pickerItems}
             onAddProduct={handleAddProduct}
             onUpdateQuantity={handleUpdateQuantity}
@@ -383,6 +427,18 @@ export default function CreateErpReturnPage() {
           </div>
 
           <Card className="flex flex-col gap-2.5 !p-3 sm:!p-4">
+            <Select
+              label={t('customers.returnWarehouse', 'საწყობი')}
+              options={warehouseOptions}
+              value={warehouseId || undefined}
+              onChange={setWarehouseId}
+              placeholder={t('customers.returnWarehouseRequired', 'აირჩიეთ საწყობი')}
+            />
+            {warehouseId === '' ? (
+              <p className="text-xs text-[var(--color-danger)]">
+                {t('customers.returnWarehouseRequired', 'აირჩიეთ საწყობი')}
+              </p>
+            ) : null}
             {lines.length === 0 ? (
               <p className="text-sm text-[var(--color-text-secondary)]">
                 {t('customers.returnItemsRequired', 'Add at least one product')}

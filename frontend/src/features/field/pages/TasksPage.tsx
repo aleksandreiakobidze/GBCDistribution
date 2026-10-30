@@ -54,7 +54,7 @@ export default function TasksPage() {
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const presetPhoto = params.get('photoId');
-  const supervisor = role === 'admin' || role === 'supervisor';
+  const supervisor = role === 'admin' || role === 'supervisor' || role === 'manager';
   const salesRep = role === 'sales_rep';
   const requestedStatus = params.get('status');
 

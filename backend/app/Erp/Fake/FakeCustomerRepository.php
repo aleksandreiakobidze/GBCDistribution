@@ -172,6 +172,7 @@ final class FakeCustomerRepository implements CustomerRepository
             idReg: (int) ($row['IdReg'] ?? 0),
             idOrgCategory: (int) ($row['IdOrgCategory'] ?? 0),
             orgCategory: $row['OrgCategory'] ?? null,
+            idOrgCompanyCategory: (int) ($row['IdOrgCompanyCategory'] ?? 0),
             latitude: isset($row['Lat']) ? (string) $row['Lat'] : null,
             longitude: isset($row['Lon']) ? (string) $row['Lon'] : null,
             useProdList: (bool) ($row['UseProdList'] ?? false),
@@ -207,6 +208,16 @@ final class FakeCustomerRepository implements CustomerRepository
             canRealHalfComp: (bool) ($row['CanRealHalfComp'] ?? false),
             minOrderTotal: OrderLimit::normalize($row['MinReal'] ?? null),
             maxOrderTotal: OrderLimit::normalize($row['MaxReal'] ?? null),
+            overdueBalance: isset($row['OverdueTanxa']) && $row['OverdueTanxa'] !== null && $row['OverdueTanxa'] !== ''
+                ? (string) $row['OverdueTanxa']
+                : null,
+            valiLimit: isset($row['ValiLimit']) && $row['ValiLimit'] !== null && $row['ValiLimit'] !== ''
+                ? (string) $row['ValiLimit']
+                : null,
+            paymentDay: (int) ($row['PaymentDay'] ?? 0),
+            monthLimit: array_key_exists('Limit', $row) && $row['Limit'] !== null && $row['Limit'] !== ''
+                ? (int) $row['Limit']
+                : null,
         );
     }
 }

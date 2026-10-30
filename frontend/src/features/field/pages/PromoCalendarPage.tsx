@@ -138,7 +138,7 @@ export default function PromoCalendarPage() {
   const role = useAuthStore((s) => s.user?.role);
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
-  const supervisor = role === 'admin' || role === 'supervisor';
+  const supervisor = role === 'admin' || role === 'supervisor' || role === 'manager';
   const salesRep = role === 'sales_rep';
   const requestedStatus = params.get('status');
   const statusFilter = requestedStatus === 'planned' || requestedStatus === 'active' || requestedStatus === 'done'

@@ -20,28 +20,54 @@ final class FmgProductRepository implements ProductRepository
 
     public function listForCustomer(int $idGvari, CustomerRecord $customer, ?string $search, ?string $cursor, int $limit, array $filters = []): PageResult
     {
-        $this->assertAssortment($customer);
+        $mode = $this->assortmentMode($filters);
+        $this->assertAssortment($customer, $mode);
 
         if (! $this->mapping->isValid($customer->priceGroup)) {
             throw new ErpException('PRICE_GROUP_UNMAPPED', 'ამ მომხმარებლის ფასების ჯგუფი არ არის დაშვებული.', 422);
         }
 
+        $useCategory = $this->hasCompanyCategoryAssortment($customer->idOrgCompanyCategory);
         $priceExpr = $this->mapping->sqlCaseExpression('p', ':fg');
         $limitPlus = max(1, min($limit + 1, 501));
         $text = $this->textColumns();
-        $sql = <<<SQL
+        $modeWhere = $mode === 'return'
+            ? 'p.ShowInPocket = 1'
+            : 'p.Active = 1';
+
+        if ($useCategory) {
+            $sql = <<<SQL
+SELECT TOP {$limitPlus}
+    {$text},
+    p.Active, p.ShowInPocket, p.CompRaod, p.CanRealHalfComp,
+    occ.IsPriority,
+    {$priceExpr} AS UnitPrice
+FROM dbo.ProdView AS p
+INNER JOIN dbo.OrgCompanyCategoryProdView AS occ
+    ON occ.IdProd = p.IdProd
+   AND occ.IdOrgCompanyCategory = :idOrgCompanyCategory
+WHERE {$modeWhere}
+SQL;
+            $bindings = [
+                'fg' => $customer->priceGroup,
+                'idOrgCompanyCategory' => $customer->idOrgCompanyCategory,
+            ];
+            $orderBy = ' ORDER BY CASE WHEN occ.IsPriority = 1 THEN 0 ELSE 1 END, p.ProdT, p.Prod, p.IdProd';
+        } else {
+            $sql = <<<SQL
 SELECT TOP {$limitPlus}
     {$text},
     p.Active, p.ShowInPocket, p.CompRaod, p.CanRealHalfComp,
     {$priceExpr} AS UnitPrice
 FROM dbo.ProdView AS p
-WHERE p.Active = 1
-  AND p.ShowInPocket = 1
+WHERE {$modeWhere}
 SQL;
+            $bindings = [
+                'fg' => $customer->priceGroup,
+            ];
+            $orderBy = ' ORDER BY p.ProdT, p.Prod, p.IdProd';
+        }
 
-        $bindings = [
-            'fg' => $customer->priceGroup,
-        ];
         $sql = $this->applyFilters(
             $sql,
             $bindings,
@@ -52,28 +78,54 @@ SQL;
             $filters['category'] ?? null,
             $filters['prodS'] ?? null,
         );
-        $sql .= ' ORDER BY p.ProdT, p.Prod, p.IdProd';
+        $sql .= $orderBy;
 
         $rows = $this->select($sql, $bindings);
         $hasMore = count($rows) > $limit;
         $rows = array_slice($rows, 0, $limit);
-        $items = array_map(fn ($row) => $this->map((array) $row, priced: true), $rows);
+        $withPriority = $useCategory && $mode === 'sale';
+        $items = array_map(
+            fn ($row) => $this->map((array) $row, priced: true, isPriority: $withPriority),
+            $rows,
+        );
         $next = $hasMore && $items !== [] ? $items[array_key_last($items)]->itemId : null;
 
         return new PageResult($items, $hasMore, $next);
     }
 
-    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId): ItemRecord
+    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId, array $filters = []): ItemRecord
     {
-        $this->assertAssortment($customer);
+        $mode = $this->assortmentMode($filters);
+        $this->assertAssortment($customer, $mode);
 
         if (! $this->mapping->isValid($customer->priceGroup)) {
             throw new ErpException('PRICE_GROUP_UNMAPPED', 'ამ მომხმარებლის ფასების ჯგუფი არ არის დაშვებული.', 422);
         }
 
+        $useCategory = $this->hasCompanyCategoryAssortment($customer->idOrgCompanyCategory);
         $priceExpr = $this->mapping->sqlCaseExpression('p', ':fg');
         $text = $this->textColumns();
-        $sql = <<<SQL
+
+        if ($useCategory) {
+            $sql = <<<SQL
+SELECT
+    {$text},
+    p.Active, p.ShowInPocket, p.CompRaod, p.CanRealHalfComp,
+    occ.IsPriority,
+    {$priceExpr} AS UnitPrice
+FROM dbo.ProdView AS p
+INNER JOIN dbo.OrgCompanyCategoryProdView AS occ
+    ON occ.IdProd = p.IdProd
+   AND occ.IdOrgCompanyCategory = :idOrgCompanyCategory
+WHERE p.IdProd = :idProd
+SQL;
+            $bindings = [
+                'fg' => $customer->priceGroup,
+                'idOrgCompanyCategory' => $customer->idOrgCompanyCategory,
+                'idProd' => $itemId,
+            ];
+        } else {
+            $sql = <<<SQL
 SELECT
     {$text},
     p.Active, p.ShowInPocket, p.CompRaod, p.CanRealHalfComp,
@@ -81,22 +133,24 @@ SELECT
 FROM dbo.ProdView AS p
 WHERE p.IdProd = :idProd
 SQL;
+            $bindings = [
+                'fg' => $customer->priceGroup,
+                'idProd' => $itemId,
+            ];
+        }
 
-        $rows = $this->select($sql, [
-            'fg' => $customer->priceGroup,
-            'idProd' => $itemId,
-        ]);
+        $rows = $this->select($sql, $bindings);
 
         if ($rows === []) {
             throw new ErpException('ITEM_NOT_FOUND', 'პროდუქტი ვერ მოიძებნა.', 404);
         }
 
         $row = (array) $rows[0];
-        if (! $this->isPocketRow($row)) {
+        if (! $this->isModeEligible($row, $mode)) {
             throw new ErpException('ITEM_NOT_FOUND', 'პროდუქტი ვერ მოიძებნა.', 404);
         }
 
-        return $this->map($row, priced: true);
+        return $this->map($row, priced: true, isPriority: $useCategory && $mode === 'sale');
     }
 
     public function listCatalog(array $filters, int $limit): PageResult
@@ -290,6 +344,30 @@ ORDER BY p.ProdS, p.ProdT';
         }
     }
 
+    private function hasCompanyCategoryAssortment(int $idOrgCompanyCategory): bool
+    {
+        if ($idOrgCompanyCategory <= 0) {
+            return false;
+        }
+
+        $rows = $this->select(
+            'SELECT TOP 1 1 AS ok FROM dbo.OrgCompanyCategoryProdView WHERE IdOrgCompanyCategory = :id',
+            ['id' => $idOrgCompanyCategory],
+        );
+
+        return $rows !== [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function assortmentMode(array $filters): string
+    {
+        $mode = (string) ($filters['mode'] ?? 'sale');
+
+        return $mode === 'return' ? 'return' : 'sale';
+    }
+
     /**
      * @param  array<string, mixed>  $row
      */
@@ -298,17 +376,21 @@ ORDER BY p.ProdS, p.ProdT';
         return ($row['Active'] ?? 0) == 1 && ($row['ShowInPocket'] ?? 0) == 1;
     }
 
-    private function assertAssortment(CustomerRecord $customer): void
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function isModeEligible(array $row, string $mode): bool
     {
-        if ($customer->useProdList) {
-            throw new ErpException(
-                'ASSORTMENT_UNRESOLVED',
-                'ამ მომხმარებლის ასორტიმენტის წყარო FMG-ში დაუდგენელია. კატალოგი არ გაიხსნა.',
-                422,
-            );
+        if ($mode === 'return') {
+            return ($row['ShowInPocket'] ?? 0) == 1;
         }
 
-        if (! $customer->orgShowPocket) {
+        return ($row['Active'] ?? 0) == 1;
+    }
+
+    private function assertAssortment(CustomerRecord $customer, string $mode): void
+    {
+        if ($mode === 'sale' && ! $customer->orgShowPocket) {
             throw new ErpException(
                 'ASSORTMENT_HIDDEN',
                 'ეს მომხმარებელი მობილურ კატალოგში არ ჩანს.',
@@ -320,7 +402,7 @@ ORDER BY p.ProdS, p.ProdT';
     /**
      * @param  array<string, mixed>  $row
      */
-    private function map(array $row, bool $priced): ItemRecord
+    private function map(array $row, bool $priced, bool $isPriority = false): ItemRecord
     {
         $unitPrice = null;
         $priceState = 'omitted';
@@ -335,6 +417,11 @@ ORDER BY p.ProdS, p.ProdT';
             } else {
                 $priceError = 'PRICE_UNAVAILABLE';
             }
+        }
+
+        $priority = false;
+        if ($isPriority) {
+            $priority = ($row['IsPriority'] ?? 0) == 1;
         }
 
         return new ItemRecord(
@@ -354,6 +441,7 @@ ORDER BY p.ProdS, p.ProdT';
             showInPocket: (bool) ($row['ShowInPocket'] ?? false),
             compRaod: isset($row['CompRaod']) ? (string) $row['CompRaod'] : null,
             canRealHalfComp: isset($row['CanRealHalfComp']) ? (bool) $row['CanRealHalfComp'] : null,
+            isPriority: $priority,
         );
     }
 }

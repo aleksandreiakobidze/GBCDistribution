@@ -55,7 +55,7 @@ final class ExactErpProvider implements ErpProvider
                 ExactErpProvider::unavailable();
             }
 
-            public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId): ItemRecord
+            public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId, array $filters = []): ItemRecord
             {
                 ExactErpProvider::unavailable();
             }

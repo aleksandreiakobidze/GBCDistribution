@@ -26,6 +26,7 @@ class ItemController extends V1Controller
 
         $idGvari = $this->idGvari($request);
         $customer = $erp->customers()->getAuthorized($idGvari, $customerId);
+        $mode = (string) $request->query('mode', 'sale') === 'return' ? 'return' : 'sale';
         $page = $erp->products()->listForCustomer(
             $idGvari,
             $customer,
@@ -35,6 +36,7 @@ class ItemController extends V1Controller
             [
                 'prodS' => $request->query('prodS'),
                 'prodT' => $request->query('prodT'),
+                'mode' => $mode,
             ],
         );
 
@@ -60,7 +62,8 @@ class ItemController extends V1Controller
 
         $idGvari = $this->idGvari($request);
         $customer = $erp->customers()->getAuthorized($idGvari, $customerId);
-        $item = $erp->products()->getForCustomer($idGvari, $customer, $itemId);
+        $mode = (string) $request->query('mode', 'sale') === 'return' ? 'return' : 'sale';
+        $item = $erp->products()->getForCustomer($idGvari, $customer, $itemId, ['mode' => $mode]);
 
         return $this->ok($item->toArray());
     }

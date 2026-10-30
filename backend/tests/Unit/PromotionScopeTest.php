@@ -210,6 +210,7 @@ class PromotionScopeTest extends TestCase
             idReg: 1,
             idOrgCategory: 1,
             orgCategory: 'Standard',
+            idOrgCompanyCategory: 1,
             latitude: null,
             longitude: null,
             useProdList: false,

@@ -3,12 +3,24 @@ export interface User {
   name: string;
   email: string;
   phone: string | null;
-  role: 'admin' | 'sales_rep' | 'supervisor' | 'warehouse' | 'driver';
+  role: 'admin' | 'sales_rep' | 'supervisor' | 'manager' | 'warehouse' | 'driver';
   avatar: string | null;
   is_active: boolean;
   id_gvari?: number | null;
   presellerMapped?: boolean;
   provider?: string;
+  fieldRules?: FieldRules;
+  menus?: string[];
+}
+
+export interface FieldRules {
+  requirePhotoBefore: boolean;
+  requirePhotoEnd: boolean;
+  requirePhotoShelf: boolean;
+  requireSurvey: boolean;
+  requireShelfAudit: boolean;
+  requireGps: boolean;
+  missedSkipsRules: boolean;
 }
 
 export interface Category {
@@ -516,6 +528,12 @@ export interface ErpCustomer {
   schedule?: ErpVisitSchedule | null;
   kegs?: Array<{ itemId: string; name: string; quantity: string }>;
   balance?: string | null;
+  overdueBalance?: string | null;
+  minOrderTotal?: string | null;
+  maxOrderTotal?: string | null;
+  valiLimit?: string | null;
+  paymentDay?: number;
+  monthLimit?: number | null;
   canRealHalfComp?: boolean;
 }
 
@@ -535,6 +553,7 @@ export interface ErpItem {
   active: boolean;
   compRaod: string | null;
   canRealHalfComp: boolean | null;
+  isPriority?: boolean;
 }
 
 export interface ErpProductTaxonomyType {
@@ -644,10 +663,17 @@ export interface ErpProductReturnLine {
   reason: string;
 }
 
+export interface ErpWarehouse {
+  id: string;
+  name: string;
+}
+
 export interface ErpProductReturn {
   id: number;
   customerId: string;
   customerName?: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   note: string | null;
   createdAt: string | null;
   lines: ErpProductReturnLine[];

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Enums\UserRole;
 use App\Erp\Exceptions\ErpException;
+use App\Erp\Support\TeamAccess;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -22,10 +23,13 @@ class EnsurePresellerMapped
             );
         }
 
-        $role = $user->role instanceof UserRole ? $user->role : UserRole::from((string) $user->role);
+        $role = $user->role instanceof UserRole ? $user->role : UserRole::tryFrom((string) $user->role);
+        if ($role === null) {
+            throw new ErpException('FIELD_FORBIDDEN', 'ეს ჩანაწერი ხელმისაწვდომი არ არის.', 403);
+        }
         $salesUserId = $request->query('salesUserId');
 
-        if ($role === UserRole::Supervisor) {
+        if (TeamAccess::isTeamLead($user)) {
             $target = $this->ownTeamSalesRep($user, $salesUserId);
             $request->attributes->set('idGvari', (int) $target->id_gvari);
             $request->attributes->set('presellerUserId', (int) $target->id);
@@ -76,10 +80,11 @@ class EnsurePresellerMapped
         }
 
         $target = User::query()->whereKey($salesUserId)->first();
+        $ids = TeamAccess::salesUserIds($supervisor);
         if (
             ! $target
             || $target->role !== UserRole::SalesRep
-            || (int) $target->supervisor_id !== (int) $supervisor->id
+            || ($ids !== null && ! in_array((int) $target->id, $ids, true))
             || $target->id_gvari === null
         ) {
             throw new ErpException(

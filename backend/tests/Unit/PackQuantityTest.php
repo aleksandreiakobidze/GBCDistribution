@@ -90,6 +90,7 @@ class PackQuantityTest extends TestCase
             idReg: 1,
             idOrgCategory: 1,
             orgCategory: null,
+            idOrgCompanyCategory: 1,
             latitude: null,
             longitude: null,
             useProdList: false,

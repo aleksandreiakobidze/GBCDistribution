@@ -1,1 +1,0 @@
-import{F as e}from"./ui-gMcJybWZ.js";var t={sales:async t=>{let{data:n}=await e.get(`/reports/sales`,{params:t});return n.data},inventory:async()=>{let{data:t}=await e.get(`/reports/inventory`);return t.data},performance:async t=>{let{data:n}=await e.get(`/reports/performance`,{params:t});return n.data}};export{t};

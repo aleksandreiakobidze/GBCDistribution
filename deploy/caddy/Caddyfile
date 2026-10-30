@@ -1,13 +1,44 @@
 # Office origin TLS terminator for LAN and VPN.
 # Laravel stays on loopback. Do not proxy SQL Server 1433.
-# Cloudflare named tunnel is deferred; leave deploy/cloudflared unused.
+# Port 443 on the office IP stays on the other app. This app is zz.office.local and :8443.
 
 {
 	auto_https off
 }
 
-gbc.office.local {
-	tls ./certs/gbc.office.local.pem ./certs/gbc.office.local-key.pem
+http://zz.office.local, http://192.168.0.22 {
+	@trust path /gbc-root.cer /trust /trust.html
+	handle @trust {
+		root * C:/Users/Administrator/Documents/GBCProduction/backend/public
+		file_server
+	}
+	@zzclient path /zz /zz.html /zz-root.cer /join-client.ps1 /join-client.cmd
+	handle @zzclient {
+		root * C:/Users/Administrator/Documents/GBCDistribution/deploy/lan-client
+		rewrite /zz /zz.html
+		@download path /join-client.ps1 /join-client.cmd
+		header @download Content-Disposition "attachment"
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
+
+zz.office.local {
+	tls ./certs/zz.office.local.pem ./certs/zz.office.local-key.pem
+	encode gzip
+	reverse_proxy 127.0.0.1:8090
+}
+
+https://192.168.0.22 {
+	tls C:/Users/Administrator/Documents/GBCProduction/certs/gbc.pem C:/Users/Administrator/Documents/GBCProduction/certs/gbc-key.pem
 	encode gzip
 	reverse_proxy 127.0.0.1:8080
+}
+
+:8443 {
+	tls ./certs/zz.office.local.pem ./certs/zz.office.local-key.pem
+	encode gzip
+	reverse_proxy 127.0.0.1:8090
 }

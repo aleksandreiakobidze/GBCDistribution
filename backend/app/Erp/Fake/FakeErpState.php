@@ -22,6 +22,12 @@ final class FakeErpState
     /** @var list<array<string, mixed>> */
     public static array $orders = [];
 
+    /** @var list<array{IdGvari: int, IdSac: string, Sac: string}> */
+    public static array $warehouses = [];
+
+    /** @var list<array{IdOrgCompanyCategory: int, IdProd: string, IsPriority: bool}> */
+    public static array $categoryProducts = [];
+
     public static bool $failNextLineWrite = false;
 
     public static int $nextOrderId = 1000;
@@ -34,6 +40,8 @@ final class FakeErpState
         self::$products = [];
         self::$promotions = [];
         self::$orders = [];
+        self::$warehouses = [];
+        self::$categoryProducts = [];
         self::$failNextLineWrite = false;
         self::$nextOrderId = 1000;
     }
@@ -45,6 +53,20 @@ final class FakeErpState
         self::$presellers = [
             ['IdGvari' => 11, 'Gvari' => 'Nino', 'IsPreseller' => true, 'GvariActive' => true],
             ['IdGvari' => 12, 'Gvari' => 'Davit', 'IsPreseller' => true, 'GvariActive' => true],
+        ];
+
+        self::$warehouses = [
+            ['IdGvari' => 11, 'IdSac' => '1', 'Sac' => 'Main warehouse'],
+            ['IdGvari' => 11, 'IdSac' => '2', 'Sac' => 'Secondary warehouse'],
+            ['IdGvari' => 12, 'IdSac' => '3', 'Sac' => 'West warehouse'],
+        ];
+
+        self::$categoryProducts = [
+            ['IdOrgCompanyCategory' => 1, 'IdProd' => '0001', 'IsPriority' => true],
+            ['IdOrgCompanyCategory' => 1, 'IdProd' => '0002', 'IsPriority' => false],
+            ['IdOrgCompanyCategory' => 1, 'IdProd' => '0003', 'IsPriority' => false],
+            ['IdOrgCompanyCategory' => 1, 'IdProd' => '0004', 'IsPriority' => false],
+            ['IdOrgCompanyCategory' => 1, 'IdProd' => '0005', 'IsPriority' => false],
         ];
 
         self::$customers = [
@@ -190,6 +212,7 @@ final class FakeErpState
             'IdReg' => 1,
             'IdOrgCategory' => 1,
             'OrgCategory' => 'Standard',
+            'IdOrgCompanyCategory' => 1,
             'Lat' => '41.7151000000',
             'Lon' => '44.8271000000',
             'UseProdList' => $useProdList,

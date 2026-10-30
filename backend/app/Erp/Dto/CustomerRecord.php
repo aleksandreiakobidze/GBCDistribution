@@ -20,6 +20,7 @@ final class CustomerRecord
         public readonly int $idReg,
         public readonly int $idOrgCategory,
         public readonly ?string $orgCategory,
+        public readonly int $idOrgCompanyCategory,
         public readonly ?string $latitude,
         public readonly ?string $longitude,
         public readonly bool $useProdList,
@@ -34,6 +35,14 @@ final class CustomerRecord
         public readonly ?string $minOrderTotal = null,
         /** SagadValiBlockView.MaxReal; null when the customer has no maximum. */
         public readonly ?string $maxOrderTotal = null,
+        /** Overdue after PaymentDay/ValiLimit; null when not overdue or unknown. */
+        public readonly ?string $overdueBalance = null,
+        /** OrgView.ValiLimit; null when missing. */
+        public readonly ?string $valiLimit = null,
+        /** OrgView.PaymentDay; 0 means end of month. */
+        public readonly int $paymentDay = 0,
+        /** OrgView.Limit; null when missing. */
+        public readonly ?int $monthLimit = null,
     ) {
     }
 
@@ -54,6 +63,7 @@ final class CustomerRecord
             'orgT' => $this->orgT,
             'idOrgCategory' => $this->idOrgCategory,
             'orgCategory' => $this->orgCategory,
+            'idOrgCompanyCategory' => $this->idOrgCompanyCategory,
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'useProdList' => $this->useProdList,
@@ -64,6 +74,12 @@ final class CustomerRecord
                 $this->kegs,
             ),
             'balance' => $this->balance,
+            'minOrderTotal' => $this->minOrderTotal,
+            'maxOrderTotal' => $this->maxOrderTotal,
+            'overdueBalance' => $this->overdueBalance,
+            'valiLimit' => $this->valiLimit,
+            'paymentDay' => $this->paymentDay,
+            'monthLimit' => $this->monthLimit,
             'canRealHalfComp' => $this->canRealHalfComp,
         ];
     }

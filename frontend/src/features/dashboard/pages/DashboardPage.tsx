@@ -18,7 +18,7 @@ export default function DashboardPage() {
   if (user?.role === 'sales_rep') {
     return <SalesDashboard />;
   }
-  if (user?.role === 'supervisor') {
+  if (user?.role === 'supervisor' || user?.role === 'manager') {
     return <SupervisorDashboard />;
   }
 

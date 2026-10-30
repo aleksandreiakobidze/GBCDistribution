@@ -45,6 +45,15 @@ if ($httpsRemote.Count -eq 0) {
     Write-Host ("Allowed inbound TCP 443 from: " + ($httpsRemote -join ', '))
 }
 
+# VPN pools are usually private. Open the web ports only. Do not touch SQL 1433 or Laravel 8090.
+$PrivateWeb = @('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')
+$WebRule = 'GBC web private LAN/VPN'
+Get-NetFirewallRule -DisplayName $WebRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+New-NetFirewallRule -DisplayName $WebRule `
+    -Direction Inbound -Action Allow -Protocol TCP -LocalPort 80,443,8443 `
+    -RemoteAddress $PrivateWeb | Out-Null
+Write-Host ("Allowed inbound TCP 80, 443, 8443 from: " + ($PrivateWeb -join ', '))
+
 Get-NetFirewallRule -DisplayName $Deny8080 -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName $Deny8080 `
     -Direction Inbound -Action Block -Protocol TCP -LocalPort 8080 | Out-Null

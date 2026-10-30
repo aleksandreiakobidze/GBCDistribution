@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\HasAvatar;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -40,7 +41,6 @@ class User extends Authenticatable implements HasAvatar
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'role' => UserRole::class,
             'id_gvari' => 'integer',
             'supervisor_id' => 'integer',
             'is_active' => 'boolean',
@@ -50,6 +50,28 @@ class User extends Authenticatable implements HasAvatar
     public function getFilamentAvatarUrl(): ?string
     {
         return null;
+    }
+
+    /**
+     * Known roles stay as the enum the rest of the app compares. A role added
+     * in settings is kept as its name and does not unlock those menus.
+     */
+    protected function role(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): UserRole|string {
+                if ($value instanceof UserRole) {
+                    return $value;
+                }
+                $text = trim((string) $value);
+                if (mb_strtolower($text, 'UTF-8') === 'manager') {
+                    return UserRole::Manager;
+                }
+
+                return UserRole::tryFrom($text) ?? $text;
+            },
+            set: fn (mixed $value): string => $value instanceof UserRole ? $value->value : trim((string) $value),
+        );
     }
 
     public function supervisor(): BelongsTo

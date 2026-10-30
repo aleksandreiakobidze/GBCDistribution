@@ -19,38 +19,42 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LogOut,
+  Settings,
+  Target,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { menuCatalog, seesMenu, type MenuKey } from '@/lib/menu';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import { Avatar } from '@/components/ui/Avatar';
-import type { User } from '@/types';
 
-interface NavItem {
-  path: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: User['role'][];
-}
+const menuIcons: Record<MenuKey, React.ComponentType<{ className?: string }>> = {
+  dashboard: LayoutDashboard,
+  settings: Settings,
+  plan: Target,
+  monitoring: Activity,
+  'my-reports': BarChart3,
+  products: Package,
+  customers: Building2,
+  routes: Map,
+  gallery: Images,
+  tasks: ClipboardList,
+  day: Sun,
+  promos: CalendarDays,
+  orders: ShoppingCart,
+  inventory: Warehouse,
+  deliveries: Truck,
+  invoices: FileText,
+  returns: RotateCcw,
+  collections: Banknote,
+  reports: BarChart3,
+};
 
-const navItems: NavItem[] = [
-  { path: '/', label: 'nav.dashboard', icon: LayoutDashboard, roles: ['admin', 'sales_rep', 'supervisor', 'warehouse', 'driver'] },
-  { path: '/my-reports', label: 'nav.myReports', icon: BarChart3, roles: ['sales_rep'] },
-  { path: '/products', label: 'nav.products', icon: Package, roles: ['admin', 'sales_rep'] },
-  { path: '/customers', label: 'nav.customers', icon: Building2, roles: ['admin', 'sales_rep'] },
-  { path: '/routes', label: 'nav.routes', icon: Map, roles: ['admin', 'supervisor'] },
-  { path: '/gallery', label: 'nav.gallery', icon: Images, roles: ['admin', 'supervisor'] },
-  { path: '/tasks', label: 'nav.tasks', icon: ClipboardList, roles: ['admin', 'supervisor'] },
-  { path: '/day', label: 'nav.day', icon: Sun, roles: ['admin', 'supervisor'] },
-  { path: '/promos', label: 'nav.promoCalendar', icon: CalendarDays, roles: ['admin', 'supervisor'] },
-  { path: '/orders', label: 'nav.orders', icon: ShoppingCart, roles: ['admin', 'sales_rep', 'warehouse'] },
-  { path: '/inventory', label: 'nav.inventory', icon: Warehouse, roles: ['admin', 'warehouse'] },
-  { path: '/deliveries', label: 'nav.deliveries', icon: Truck, roles: ['admin', 'driver'] },
-  { path: '/invoices', label: 'nav.invoices', icon: FileText, roles: ['admin', 'sales_rep'] },
-  { path: '/returns', label: 'nav.returns', icon: RotateCcw, roles: ['admin', 'sales_rep'] },
-  { path: '/collections', label: 'nav.collections', icon: Banknote, roles: ['admin', 'sales_rep'] },
-  { path: '/reports', label: 'nav.reports', icon: BarChart3, roles: ['admin'] },
-];
+const navItems = menuCatalog.map((item) => ({
+  ...item,
+  icon: menuIcons[item.key],
+}));
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -58,9 +62,7 @@ export function Sidebar() {
   const { user, clearAuth } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUiStore();
 
-  const visibleItems = navItems.filter(
-    (item) => user && item.roles.includes(user.role),
-  );
+  const visibleItems = navItems.filter((item) => user && seesMenu(user.role, user.menus, item.key));
 
   const handleLogout = () => {
     clearAuth();

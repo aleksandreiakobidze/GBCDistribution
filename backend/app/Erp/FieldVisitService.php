@@ -6,7 +6,11 @@ use App\Enums\UserRole;
 use App\Erp\Contracts\ErpProvider;
 use App\Erp\Exceptions\ErpException;
 use App\Erp\Support\GeoPoint;
+use App\Models\ErpShelfAudit;
 use App\Models\ErpVisit;
+use App\Models\ErpVisitPhoto;
+use App\Models\ErpVisitSurvey;
+use App\Models\FieldSetting;
 use App\Models\User;
 use Carbon\Carbon;
 
@@ -54,8 +58,12 @@ final class FieldVisitService
         $this->assertSalesRep($actor);
 
         $customerId = (string) $input['customerId'];
-        $customer = $this->erp->customers()->getAuthorized($idGvari, $customerId);
         [$latitude, $longitude] = $this->coords($input['latitude'] ?? null, $input['longitude'] ?? null);
+        if (FieldSetting::current()->require_gps && ($latitude === null || $longitude === null)) {
+            throw new ErpException('FIELD_RULE', 'GPS აუცილებელია.', 422);
+        }
+
+        $customer = $this->erp->customers()->getAuthorized($idGvari, $customerId);
 
         $open = ErpVisit::query()
             ->where('user_id', $ownerUserId)
@@ -120,6 +128,7 @@ final class FieldVisitService
         }
 
         [$latitude, $longitude] = $this->coords($input['latitude'] ?? null, $input['longitude'] ?? null);
+        $this->assertFinishRules($row, $outcome, $latitude, $longitude);
 
         $row->update([
             'status' => $outcome,
@@ -129,6 +138,74 @@ final class FieldVisitService
         ]);
 
         return $row->fresh()?->toApiArray() ?? $row->toApiArray();
+    }
+
+    private function assertFinishRules(ErpVisit $visit, string $outcome, ?string $latitude, ?string $longitude): void
+    {
+        $rules = FieldSetting::current();
+        if ($outcome === ErpVisit::STATUS_MISSED && $rules->missed_skips_rules) {
+            return;
+        }
+
+        $missing = [];
+        if ($rules->require_gps && ($latitude === null || $longitude === null)) {
+            $missing[] = 'GPS';
+        }
+        if ($rules->require_photo_before && ! $this->hasTodayPhase($visit, ErpVisitPhoto::PHASE_BEFORE)) {
+            $missing[] = 'ვიზიტამდე ფოტო';
+        }
+        if ($outcome === ErpVisit::STATUS_ARRIVED && $rules->require_photo_end && ! $this->hasTodayPhase($visit, ErpVisitPhoto::PHASE_END)) {
+            $missing[] = 'დასრულების ფოტო';
+        }
+        if ($rules->require_photo_shelf && ! $this->hasTodayPhase($visit, ErpVisitPhoto::PHASE_SHELF)) {
+            $missing[] = 'თაროს ფოტო';
+        }
+        if ($rules->require_survey && ! ErpVisitSurvey::query()->where('visit_id', $visit->id)->exists()) {
+            $missing[] = 'გამოკითხვა';
+        }
+        if ($rules->require_shelf_audit && ! $this->hasTodayShelfAudit($visit)) {
+            $missing[] = 'თაროს აუდიტი';
+        }
+
+        if ($missing !== []) {
+            throw new ErpException('FIELD_RULE', 'აუცილებელია: '.implode(', ', $missing).'.', 422);
+        }
+    }
+
+    private function hasTodayPhase(ErpVisit $visit, string $phase): bool
+    {
+        [$start, $end] = $this->todayWindow();
+
+        return ErpVisitPhoto::query()
+            ->where('user_id', $visit->user_id)
+            ->where('customer_id', $visit->customer_id)
+            ->where('phase', $phase)
+            ->whereBetween('taken_at', [$start, $end])
+            ->where(function ($query) use ($visit): void {
+                $query->where('visit_id', $visit->id)->orWhereNull('visit_id');
+            })
+            ->exists();
+    }
+
+    private function hasTodayShelfAudit(ErpVisit $visit): bool
+    {
+        [$start, $end] = $this->todayWindow();
+
+        return ErpShelfAudit::query()
+            ->where('user_id', $visit->user_id)
+            ->where('customer_id', $visit->customer_id)
+            ->whereBetween('created_at', [$start, $end])
+            ->exists();
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function todayWindow(): array
+    {
+        $now = Carbon::now('Asia/Tbilisi');
+
+        return [$now->copy()->startOfDay(), $now->copy()->endOfDay()];
     }
 
     private function assertSalesRep(User $actor): void

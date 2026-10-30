@@ -15,7 +15,7 @@ export function useLogin() {
         presellerMapped: data.user.presellerMapped ?? data.user.id_gvari != null,
       };
       setAuth(user, data.token);
-      navigate(user.role === 'sales_rep' ? '/customers' : user.role === 'supervisor' ? '/routes' : '/');
+      navigate(user.role === 'sales_rep' ? '/customers' : user.role === 'supervisor' || user.role === 'manager' ? '/routes' : '/');
     },
   });
 }

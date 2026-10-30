@@ -23,6 +23,7 @@ class ProductReturnController extends V1Controller
     {
         $data = $request->validate([
             'customerId' => ['required', 'string'],
+            'warehouseId' => ['required', 'string', 'max:32'],
             'note' => ['nullable', 'string', 'max:300'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.itemId' => ['required', 'string'],
@@ -42,6 +43,7 @@ class ProductReturnController extends V1Controller
     {
         $data = $request->validate([
             'customerId' => ['nullable', 'string'],
+            'warehouseId' => ['nullable', 'string', 'max:32'],
             'note' => ['nullable', 'string', 'max:300'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.itemId' => ['required', 'string'],

@@ -13,6 +13,8 @@ class ErpProductReturn extends Model
         'id_gvari',
         'customer_id',
         'customer_name',
+        'warehouse_id',
+        'warehouse_name',
         'note',
     ];
 
@@ -35,6 +37,10 @@ class ErpProductReturn extends Model
             'id' => $this->id,
             'customerId' => (string) $this->customer_id,
             'customerName' => $this->customer_name,
+            'warehouseId' => $this->warehouse_id !== null && $this->warehouse_id !== ''
+                ? (string) $this->warehouse_id
+                : null,
+            'warehouseName' => $this->warehouse_name,
             'note' => $this->note,
             'createdAt' => $this->created_at?->toIso8601String(),
             'lines' => $this->lines->map(fn (ErpProductReturnLine $line) => [

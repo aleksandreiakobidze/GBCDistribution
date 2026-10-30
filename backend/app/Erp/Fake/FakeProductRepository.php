@@ -17,16 +17,17 @@ final class FakeProductRepository implements ProductRepository
 
     public function listForCustomer(int $idGvari, CustomerRecord $customer, ?string $search, ?string $cursor, int $limit, array $filters = []): PageResult
     {
-        if ($customer->useProdList) {
+        $mode = (($filters['mode'] ?? 'sale') === 'return') ? 'return' : 'sale';
+        if ($mode === 'sale' && ! $customer->orgShowPocket) {
             throw new ErpException(
-                'ASSORTMENT_UNRESOLVED',
-                'ამ მომხმარებლის ასორტიმენტის წყარო FMG-ში დაუდგენელია. კატალოგი არ გაიხსნა.',
+                'ASSORTMENT_HIDDEN',
+                'ეს მომხმარებელი მობილურ კატალოგში არ ჩანს.',
                 422,
             );
         }
 
         $rows = $this->eligible($customer, $search, $filters);
-        $this->sortByProdT($rows);
+        $this->sortByPriorityThenProdT($rows, $mode === 'sale');
 
         if ($cursor) {
             $rows = array_values(array_filter($rows, fn ($r) => strcmp((string) $r['IdProd'], $cursor) > 0));
@@ -36,30 +37,37 @@ final class FakeProductRepository implements ProductRepository
         $hasMore = count($rows) > $limit;
         $next = $hasMore ? (string) $slice[array_key_last($slice)]['IdProd'] : null;
 
+        $withPriority = $mode === 'sale' && $this->hasCompanyCategoryAssortment($customer);
+
         return new PageResult(
-            array_map(fn ($r) => $this->map($r, $customer), $slice),
+            array_map(fn ($r) => $this->map($r, $customer, $withPriority), $slice),
             $hasMore,
             $next,
         );
     }
 
-    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId): ItemRecord
+    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId, array $filters = []): ItemRecord
     {
-        if ($customer->useProdList) {
+        $mode = (($filters['mode'] ?? 'sale') === 'return') ? 'return' : 'sale';
+        if ($mode === 'sale' && ! $customer->orgShowPocket) {
             throw new ErpException(
-                'ASSORTMENT_UNRESOLVED',
-                'ამ მომხმარებლის ასორტიმენტის წყარო FMG-ში დაუდგენელია. კატალოგი არ გაიხსნა.',
+                'ASSORTMENT_HIDDEN',
+                'ეს მომხმარებელი მობილურ კატალოგში არ ჩანს.',
                 422,
             );
         }
 
         foreach (FakeErpState::$products as $row) {
             if ((string) $row['IdProd'] === $itemId) {
-                if (! $this->isEligibleRow($row, $customer, null)) {
+                if (! $this->isEligibleRow($row, $customer, null, $filters)) {
                     throw new ErpException('ITEM_NOT_FOUND', 'პროდუქტი ვერ მოიძებნა.', 404);
                 }
 
-                return $this->map($row, $customer);
+                return $this->map(
+                    $row,
+                    $customer,
+                    $mode === 'sale' && $this->hasCompanyCategoryAssortment($customer),
+                );
             }
         }
 
@@ -161,35 +169,93 @@ final class FakeProductRepository implements ProductRepository
     }
 
     /**
-     * @param  array{prodS?: ?string, prodT?: ?string}  $filters
+     * @param  array{prodS?: ?string, prodT?: ?string, mode?: string}  $filters
      * @return list<array<string, mixed>>
      */
     private function eligible(CustomerRecord $customer, ?string $search, array $filters = []): array
     {
-        return array_values(array_filter(
+        $rows = array_values(array_filter(
             FakeErpState::$products,
             fn ($row) => $this->isEligibleRow($row, $customer, $search, $filters)
         ));
+        foreach ($rows as &$row) {
+            $row['_isPriority'] = $this->categoryPriority($customer, (string) $row['IdProd']);
+        }
+        unset($row);
+
+        return $rows;
     }
 
     /**
-     * @param  array{prodS?: ?string, prodT?: ?string}  $filters
+     * @param  array{prodS?: ?string, prodT?: ?string, mode?: string}  $filters
      * @param  array<string, mixed>  $row
      */
     private function isEligibleRow(array $row, CustomerRecord $customer, ?string $search, array $filters = []): bool
     {
-        if (! $this->isPocketRow(
+        $mode = (($filters['mode'] ?? 'sale') === 'return') ? 'return' : 'sale';
+        if ($mode === 'return') {
+            if (($row['ShowInPocket'] ?? false) !== true) {
+                return false;
+            }
+        } elseif (($row['Active'] ?? false) !== true) {
+            return false;
+        }
+
+        if ($this->hasCompanyCategoryAssortment($customer) && ! $this->matchesCategory($customer, (string) $row['IdProd'])) {
+            return false;
+        }
+
+        return $this->matchesSearchAndTaxonomy(
             $row,
             $search,
             $filters['prodT'] ?? null,
             null,
             null,
             $filters['prodS'] ?? null,
-        )) {
+        );
+    }
+
+    private function hasCompanyCategoryAssortment(CustomerRecord $customer): bool
+    {
+        if ($customer->idOrgCompanyCategory <= 0) {
             return false;
         }
 
-        return $customer->orgShowPocket;
+        foreach (FakeErpState::$categoryProducts as $link) {
+            if ((int) ($link['IdOrgCompanyCategory'] ?? 0) === $customer->idOrgCompanyCategory) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function matchesCategory(CustomerRecord $customer, string $itemId): bool
+    {
+        foreach (FakeErpState::$categoryProducts as $link) {
+            if (
+                (int) ($link['IdOrgCompanyCategory'] ?? 0) === $customer->idOrgCompanyCategory
+                && (string) ($link['IdProd'] ?? '') === $itemId
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function categoryPriority(CustomerRecord $customer, string $itemId): bool
+    {
+        foreach (FakeErpState::$categoryProducts as $link) {
+            if (
+                (int) ($link['IdOrgCompanyCategory'] ?? 0) === $customer->idOrgCompanyCategory
+                && (string) ($link['IdProd'] ?? '') === $itemId
+            ) {
+                return (bool) ($link['IsPriority'] ?? false);
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -203,6 +269,21 @@ final class FakeProductRepository implements ProductRepository
         if (($row['ShowInPocket'] ?? false) !== true) {
             return false;
         }
+
+        return $this->matchesSearchAndTaxonomy($row, $search, $prodT, $prodG, $category, $prodS);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function matchesSearchAndTaxonomy(
+        array $row,
+        ?string $search,
+        ?string $prodT,
+        ?string $prodG,
+        ?string $category,
+        ?string $prodS = null,
+    ): bool {
         if ($prodS !== null && (string) ($row['ProdS'] ?? '') !== $prodS) {
             return false;
         }
@@ -230,7 +311,22 @@ final class FakeProductRepository implements ProductRepository
      */
     private function sortByProdT(array &$rows): void
     {
-        usort($rows, function (array $a, array $b): int {
+        $this->sortByPriorityThenProdT($rows, false);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function sortByPriorityThenProdT(array &$rows, bool $priorityFirst): void
+    {
+        usort($rows, function (array $a, array $b) use ($priorityFirst): int {
+            if ($priorityFirst) {
+                $pa = (bool) ($a['_isPriority'] ?? false);
+                $pb = (bool) ($b['_isPriority'] ?? false);
+                if ($pa !== $pb) {
+                    return $pa ? -1 : 1;
+                }
+            }
             $type = strcmp((string) ($a['ProdT'] ?? ''), (string) ($b['ProdT'] ?? ''));
             if ($type !== 0) {
                 return $type;
@@ -247,7 +343,7 @@ final class FakeProductRepository implements ProductRepository
     /**
      * @param  array<string, mixed>  $row
      */
-    private function map(array $row, ?CustomerRecord $customer): ItemRecord
+    private function map(array $row, ?CustomerRecord $customer, bool $withPriority = false): ItemRecord
     {
         $unitPrice = null;
         $priceState = 'omitted';
@@ -261,6 +357,11 @@ final class FakeProductRepository implements ProductRepository
             } catch (\InvalidArgumentException) {
                 $priceError = 'PRICE_UNAVAILABLE';
             }
+        }
+
+        $isPriority = false;
+        if ($withPriority && $customer !== null) {
+            $isPriority = $this->categoryPriority($customer, (string) $row['IdProd']);
         }
 
         return new ItemRecord(
@@ -280,6 +381,7 @@ final class FakeProductRepository implements ProductRepository
             showInPocket: (bool) ($row['ShowInPocket'] ?? false),
             compRaod: isset($row['CompRaod']) ? (string) $row['CompRaod'] : null,
             canRealHalfComp: isset($row['CanRealHalfComp']) ? (bool) $row['CanRealHalfComp'] : null,
+            isPriority: $isPriority,
         );
     }
 }

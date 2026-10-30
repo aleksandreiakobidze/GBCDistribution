@@ -96,7 +96,7 @@ export default function GalleryPage() {
   const [params] = useSearchParams();
   const role = useAuthStore((s) => s.user?.role);
   const userId = useAuthStore((s) => s.user?.id);
-  const reviewer = role === 'admin' || role === 'supervisor';
+  const reviewer = role === 'admin' || role === 'supervisor' || role === 'manager';
   const queryClient = useQueryClient();
   const initialPhase = params.get('phase');
   const [salesIds, setSalesIds] = useState<string[]>(() => salesQuery(params.get('sales')));
@@ -276,7 +276,7 @@ export default function GalleryPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [openId, step]);
 
-  if (role && role !== 'supervisor' && role !== 'admin' && role !== 'sales_rep') {
+  if (role && role !== 'supervisor' && role !== 'manager' && role !== 'admin' && role !== 'sales_rep') {
     return <Navigate to="/" replace />;
   }
 

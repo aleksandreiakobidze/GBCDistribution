@@ -15,8 +15,10 @@ final class VisitDocumentService
     /** @var list<string> */
     public const RETURN_REASONS = ['damaged', 'expired', 'wrong_item', 'other'];
 
-    public function __construct(private readonly ErpProvider $erp)
-    {
+    public function __construct(
+        private readonly ErpProvider $erp,
+        private readonly WarehouseCatalog $warehouses,
+    ) {
     }
 
     /**
@@ -234,13 +236,14 @@ final class VisitDocumentService
     }
 
     /**
-     * @param  array{customerId: string, note?: string|null, lines: list<array{itemId: string, quantity: string, reason: string}>}  $input
+     * @param  array{customerId: string, warehouseId: string, note?: string|null, lines: list<array{itemId: string, quantity: string, reason: string}>}  $input
      * @return array<string, mixed>
      */
     public function createReturn(User $user, int $idGvari, array $input): array
     {
         $customerId = (string) $input['customerId'];
         $customer = $this->erp->customers()->getAuthorized($idGvari, $customerId);
+        $warehouse = $this->resolveWarehouse($idGvari, (string) ($input['warehouseId'] ?? ''));
 
         $lines = $input['lines'] ?? [];
         if ($lines === []) {
@@ -257,12 +260,14 @@ final class VisitDocumentService
 
         $prepared = $this->prepareReturnLines($lines);
 
-        $return = DB::transaction(function () use ($user, $idGvari, $customer, $customerId, $note, $prepared) {
+        $return = DB::transaction(function () use ($user, $idGvari, $customer, $customerId, $warehouse, $note, $prepared) {
             $header = ErpProductReturn::query()->create([
                 'user_id' => $user->id,
                 'id_gvari' => $idGvari,
                 'customer_id' => $customerId,
                 'customer_name' => $customer->name,
+                'warehouse_id' => $warehouse['id'],
+                'warehouse_name' => $warehouse['name'],
                 'note' => $note,
             ]);
             foreach ($prepared as $line) {
@@ -276,7 +281,7 @@ final class VisitDocumentService
     }
 
     /**
-     * @param  array{customerId?: string, note?: string|null, lines: list<array{itemId: string, quantity: string, reason: string}>}  $input
+     * @param  array{customerId?: string, warehouseId?: string, note?: string|null, lines: list<array{itemId: string, quantity: string, reason: string}>}  $input
      * @return array<string, mixed>
      */
     public function updateReturn(User $user, int $idGvari, int $id, array $input): array
@@ -293,6 +298,10 @@ final class VisitDocumentService
 
         $customerId = (string) ($input['customerId'] ?? $header->customer_id);
         $customer = $this->erp->customers()->getAuthorized($idGvari, $customerId);
+        $warehouseId = array_key_exists('warehouseId', $input)
+            ? (string) ($input['warehouseId'] ?? '')
+            : (string) ($header->warehouse_id ?? '');
+        $warehouse = $this->resolveWarehouse($idGvari, $warehouseId);
 
         $lines = $input['lines'] ?? [];
         if ($lines === []) {
@@ -311,10 +320,12 @@ final class VisitDocumentService
 
         $prepared = $this->prepareReturnLines($lines);
 
-        $return = DB::transaction(function () use ($header, $customer, $customerId, $note, $prepared) {
+        $return = DB::transaction(function () use ($header, $customer, $customerId, $warehouse, $note, $prepared) {
             $header->update([
                 'customer_id' => $customerId,
                 'customer_name' => $customer->name,
+                'warehouse_id' => $warehouse['id'],
+                'warehouse_name' => $warehouse['name'],
                 'note' => $note,
             ]);
             $header->lines()->delete();
@@ -326,6 +337,24 @@ final class VisitDocumentService
         });
 
         return $this->presentReturn($idGvari, $return);
+    }
+
+    /**
+     * @return array{id: string, name: string}
+     */
+    private function resolveWarehouse(int $idGvari, string $warehouseId): array
+    {
+        $warehouseId = trim($warehouseId);
+        if ($warehouseId === '') {
+            throw new ErpException('WAREHOUSE_REQUIRED', 'აირჩიეთ საწყობი.', 422);
+        }
+
+        $warehouse = $this->warehouses->findForGvari($idGvari, $warehouseId);
+        if ($warehouse === null) {
+            throw new ErpException('WAREHOUSE_INVALID', 'საწყობი ვერ მოიძებნა.', 422);
+        }
+
+        return $warehouse;
     }
 
     /**

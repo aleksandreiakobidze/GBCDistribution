@@ -11,12 +11,32 @@ final class TeamAccess
 {
     public static function role(User $actor): UserRole
     {
-        return $actor->role instanceof UserRole ? $actor->role : UserRole::from((string) $actor->role);
+        $role = $actor->role;
+        if ($role instanceof UserRole) {
+            return $role;
+        }
+        $text = trim((string) $role);
+        if (mb_strtolower($text, 'UTF-8') === 'manager') {
+            return UserRole::Manager;
+        }
+        $known = UserRole::tryFrom($text);
+        if ($known === null) {
+            self::deny();
+        }
+
+        return $known;
     }
 
     public static function deny(): void
     {
         throw new ErpException('FIELD_FORBIDDEN', 'ეს ჩანაწერი ხელმისაწვდომი არ არის.', 403);
+    }
+
+    public static function isTeamLead(User $actor): bool
+    {
+        $role = self::role($actor);
+
+        return $role === UserRole::Supervisor || $role === UserRole::Manager;
     }
 
     /**
@@ -30,8 +50,24 @@ final class TeamAccess
         }
         if ($role === UserRole::Supervisor) {
             return User::query()
-                ->where('supervisor_id', $actor->id)
                 ->where('role', UserRole::SalesRep)
+                ->whereIn('id', function ($sub) use ($actor): void {
+                    $sub->select('sales_user_id')
+                        ->from('supervisor_sales')
+                        ->where('supervisor_user_id', $actor->id);
+                })
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+        if ($role === UserRole::Manager) {
+            return User::query()
+                ->where('role', UserRole::SalesRep)
+                ->whereIn('id', function ($sub) use ($actor): void {
+                    $sub->select('sales_user_id')
+                        ->from('manager_sales')
+                        ->where('manager_user_id', $actor->id);
+                })
                 ->pluck('id')
                 ->map(fn ($id) => (int) $id)
                 ->all();
@@ -71,7 +107,7 @@ final class TeamAccess
     public static function assertSupervisor(User $actor): void
     {
         $role = self::role($actor);
-        if ($role !== UserRole::Supervisor && $role !== UserRole::Admin) {
+        if ($role !== UserRole::Supervisor && $role !== UserRole::Manager && $role !== UserRole::Admin) {
             self::deny();
         }
     }

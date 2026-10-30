@@ -4,6 +4,7 @@ namespace App\Erp;
 
 use App\Enums\UserRole;
 use App\Erp\Exceptions\ErpException;
+use App\Erp\Support\TeamAccess;
 use App\Models\ErpVisitPhoto;
 use App\Models\User;
 use Carbon\Carbon;
@@ -230,17 +231,14 @@ final class VisitPhotoGalleryService
      */
     private function scoped(User $actor): Builder
     {
-        $role = $actor->role instanceof UserRole ? $actor->role : UserRole::from((string) $actor->role);
+        $role = TeamAccess::role($actor);
         if ($role === UserRole::Admin) {
             return ErpVisitPhoto::query();
         }
-        if ($role === UserRole::Supervisor) {
-            $ids = User::query()
-                ->where('supervisor_id', $actor->id)
-                ->where('role', UserRole::SalesRep)
-                ->pluck('id');
+        if ($role === UserRole::Supervisor || $role === UserRole::Manager) {
+            $ids = TeamAccess::salesUserIds($actor) ?? [];
 
-            return ErpVisitPhoto::query()->whereIn('user_id', $ids);
+            return ErpVisitPhoto::query()->whereIn('user_id', $ids === [] ? [-1] : $ids);
         }
         if ($role === UserRole::SalesRep) {
             return ErpVisitPhoto::query()->where('user_id', $actor->id);
@@ -251,19 +249,15 @@ final class VisitPhotoGalleryService
 
     private function assertCanReview(User $actor): void
     {
-        $role = $actor->role instanceof UserRole ? $actor->role : UserRole::from((string) $actor->role);
-        if ($role !== UserRole::Admin && $role !== UserRole::Supervisor) {
+        $role = TeamAccess::role($actor);
+        if ($role !== UserRole::Admin && $role !== UserRole::Supervisor && $role !== UserRole::Manager) {
             throw new ErpException('GALLERY_FORBIDDEN', 'გალერეა სუპერვაიზორისთვისაა.', 403);
         }
     }
 
     private function assertSalesFilter(User $actor, int $salesUserId): void
     {
-        $target = User::query()->whereKey($salesUserId)->where('role', UserRole::SalesRep)->first();
-        $role = $actor->role instanceof UserRole ? $actor->role : UserRole::from((string) $actor->role);
-        if (! $target || ($role === UserRole::Supervisor && (int) $target->supervisor_id !== (int) $actor->id)) {
-            throw new ErpException('FORBIDDEN_PRESELLER', 'ამ სეილს რეპის მარშრუტი არ გეკუთვნით.', 403);
-        }
+        TeamAccess::assertSales($actor, $salesUserId);
     }
 
     private function jpegBytes(ErpVisitPhoto $row): string

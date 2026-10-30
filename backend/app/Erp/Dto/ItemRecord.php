@@ -21,6 +21,7 @@ final class ItemRecord
         public readonly bool $showInPocket,
         public readonly ?string $compRaod = null,
         public readonly ?bool $canRealHalfComp = null,
+        public readonly bool $isPriority = false,
     ) {
     }
 
@@ -42,6 +43,7 @@ final class ItemRecord
             'active' => $this->active,
             'compRaod' => $this->compRaod,
             'canRealHalfComp' => $this->canRealHalfComp,
+            'isPriority' => $this->isPriority,
         ];
     }
 }

@@ -7,7 +7,12 @@ use App\Erp\Contracts\ErpProvider;
 use App\Erp\Dto\CustomerRecord;
 use App\Erp\Dto\ItemRecord;
 use App\Erp\Exceptions\ErpException;
+use App\Models\ErpCollection;
+use App\Models\ErpPlanogramLine;
+use App\Models\ErpProductReturn;
+use App\Models\ErpProductReturnLine;
 use App\Models\ErpPromoPlan;
+use App\Models\ErpSavedOrder;
 use App\Models\ErpShelfAudit;
 use App\Models\ErpShelfAuditLine;
 use App\Models\ErpTask;
@@ -29,6 +34,7 @@ class FieldDemoCommand extends Command
         {--all : Delete every field row, demo and real}
         {--sales= : Limit to one sales rep by id, email or name}
         {--days=7 : How many past days to fill}
+        {--each=0 : Insert this many of each operation for --sales only. Does not touch the uploaded plan}
         {--force : Skip the confirmation of --all}';
 
     protected $description = 'Seed tagged demo field work (visits, photos, surveys, coaching, tasks, shelf audits, promo plans) for the supervisor and sales rep screens.';
@@ -49,6 +55,17 @@ class FieldDemoCommand extends Command
 
         if ($this->option('clear')) {
             return $this->clearDemo();
+        }
+
+        $each = (int) $this->option('each');
+        if ($each > 0) {
+            if (trim((string) $this->option('sales')) === '') {
+                $this->error('Pass --sales together with --each.');
+
+                return self::FAILURE;
+            }
+
+            return $this->seedEach($erp, max(1, min(30, $each)));
         }
 
         return $this->seed($erp);
@@ -272,20 +289,246 @@ class FieldDemoCommand extends Command
                 $manifest['promos'][] = (int) $row->id;
             }
 
+            $planogramIds = $this->seedPlanograms($rep, $customers, $items);
+            $savedOrderIds = $this->seedSavedOrders($rep, $customers, $items);
+            $manifest['planograms'] = [...$manifest['planograms'], ...$planogramIds];
+            $manifest['savedOrders'] = [...$manifest['savedOrders'], ...$savedOrderIds];
+
             $manifest['visits'] = [...$manifest['visits'], ...$visitIds];
             $manifest['photos'] = [...$manifest['photos'], ...$photoIds];
 
             $this->info(sprintf(
-                '  %d visits, %d photos, %d tasks, %d promo plans',
+                '  %d visits, %d photos, %d tasks, %d promo plans, %d planogram lines, %d saved orders',
                 count($visitIds),
                 count($photoIds),
                 count($taskPlan),
                 count($promoPlan),
+                count($planogramIds),
+                count($savedOrderIds),
             ));
         }
 
         $this->writeManifest($manifest);
         $this->comment('Demo rows carry the '.self::MARK.' prefix and the #'.self::TAG.' photo tag. Remove them with: php artisan field:demo --clear');
+
+        return self::SUCCESS;
+    }
+
+    private function seedEach(ErpProvider $erp, int $count): int
+    {
+        $reps = $this->targetReps();
+        if ($reps === []) {
+            $this->error('No sales rep with an FMG IdGvari matched --sales.');
+
+            return self::FAILURE;
+        }
+
+        $manifest = $this->manifest();
+        $today = Carbon::now(self::TZ)->startOfDay();
+
+        foreach ($reps as $rep) {
+            try {
+                $customers = $erp->customers()
+                    ->listForPreseller((int) $rep->id_gvari, null, null, max(12, $count), 'all')
+                    ->items;
+                $items = $customers === []
+                    ? []
+                    : $erp->products()->listForCustomer((int) $rep->id_gvari, $customers[0], null, null, 8)->items;
+            } catch (ErpException $e) {
+                $this->error($rep->name.': '.$e->getMessage());
+
+                return self::FAILURE;
+            } catch (Throwable) {
+                $this->error('FMG ბაზა ამჟამად მიუწვდომელია.');
+
+                return self::FAILURE;
+            }
+
+            $customers = array_values(array_filter(
+                $customers,
+                static fn (CustomerRecord $row) => $row->customerId !== '',
+            ));
+            if ($customers === []) {
+                $this->warn($rep->name.': no customers on the FMG route, skipped.');
+
+                continue;
+            }
+
+            $supervisorId = DB::table('supervisor_sales')->where('sales_user_id', $rep->id)->value('supervisor_user_id');
+            $supervisor = $supervisorId ? User::query()->whereKey($supervisorId)->first() : null;
+            $fallbackItem = $items[0] ?? null;
+
+            for ($index = 0; $index < $count; $index++) {
+                $customer = $customers[$index % count($customers)];
+                $startedAt = (clone $today)->setTime(9, 0)->addMinutes($index * 20);
+                $endedAt = (clone $startedAt)->addMinutes(25);
+                $visit = ErpVisit::query()->create([
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'status' => ErpVisit::STATUS_ARRIVED,
+                    'started_at' => $startedAt,
+                    'ended_at' => $endedAt,
+                    'latitude' => $customer->latitude,
+                    'longitude' => $customer->longitude,
+                ]);
+                $manifest['visits'][] = (int) $visit->id;
+
+                $survey = ErpVisitSurvey::query()->create([
+                    'visit_id' => $visit->id,
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'shelf_stocked' => true,
+                    'price_visible' => true,
+                    'promo_present' => $index % 2 === 0,
+                    'competitor_seen' => $index % 3 === 0,
+                ]);
+                $manifest['surveys'][] = (int) $survey->id;
+
+                $shelfPhotoId = null;
+                foreach ([
+                    ErpVisitPhoto::PHASE_BEFORE,
+                    ErpVisitPhoto::PHASE_SURVEY,
+                    ErpVisitPhoto::PHASE_SHELF,
+                    ErpVisitPhoto::PHASE_END,
+                ] as $phaseIndex => $phase) {
+                    $photoId = $this->storePhoto(
+                        $rep,
+                        $customer,
+                        (int) $visit->id,
+                        $phase,
+                        (clone $startedAt)->addMinutes($phaseIndex + 1),
+                    );
+                    if ($photoId !== null) {
+                        $manifest['photos'][] = $photoId;
+                        if ($phase === ErpVisitPhoto::PHASE_SHELF) {
+                            $shelfPhotoId = $photoId;
+                        }
+                    }
+                }
+
+                if ($supervisor) {
+                    $coaching = ErpVisitCoaching::query()->create([
+                        'visit_id' => $visit->id,
+                        'user_id' => $rep->id,
+                        'supervisor_id' => $supervisor->id,
+                        'rating' => 3 + ($index % 3),
+                        'note' => self::MARK.' ფასის ეტიკეტი უფრო თვალსაჩინოდ დადე.',
+                    ]);
+                    $manifest['coaching'][] = (int) $coaching->id;
+                }
+
+                $audit = ErpShelfAudit::query()->create([
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'visit_id' => $visit->id,
+                    'photo_id' => $shelfPhotoId,
+                ]);
+                $manifest['shelfAudits'][] = (int) $audit->id;
+                $item = $fallbackItem;
+                ErpShelfAuditLine::query()->create([
+                    'audit_id' => $audit->id,
+                    'item_id' => $item?->itemId ?? 'demo',
+                    'item_name' => $item?->name ?? 'სატესტო პროდუქტი',
+                    'status' => ['present', 'low', 'missing'][$index % 3],
+                ]);
+
+                $statuses = [
+                    ['status' => ErpTask::STATUS_OPEN, 'due' => 1, 'checked' => false],
+                    ['status' => ErpTask::STATUS_OPEN, 'due' => -2, 'checked' => false],
+                    ['status' => ErpTask::STATUS_DONE, 'due' => 0, 'checked' => false],
+                    ['status' => ErpTask::STATUS_DONE, 'due' => -1, 'checked' => true],
+                ];
+                $taskPlan = $statuses[$index % count($statuses)];
+                $done = $taskPlan['status'] === ErpTask::STATUS_DONE;
+                $checked = $done && $taskPlan['checked'] && $supervisor;
+                $task = ErpTask::query()->create([
+                    'created_by' => $supervisor?->id ?? $rep->id,
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'title' => self::MARK.' სატესტო დავალება '.($index + 1),
+                    'note' => self::MARK.' სატესტო დავალება',
+                    'due_on' => (clone $today)->addDays((int) $taskPlan['due'])->toDateString(),
+                    'status' => $taskPlan['status'],
+                    'completed_at' => $done ? (clone $today)->setTime(16, 20) : null,
+                    'checked_by' => $checked ? $supervisor->id : null,
+                    'checked_at' => $checked ? (clone $today)->setTime(18, 5) : null,
+                ]);
+                $manifest['tasks'][] = (int) $task->id;
+
+                $promoStatus = [ErpPromoPlan::PLANNED, ErpPromoPlan::ACTIVE, ErpPromoPlan::DONE][$index % 3];
+                $promo = ErpPromoPlan::query()->create([
+                    'created_by' => $supervisor?->id ?? $rep->id,
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'title' => self::MARK.' სატესტო აქცია '.($index + 1),
+                    'starts_on' => (clone $today)->subDay()->toDateString(),
+                    'ends_on' => (clone $today)->addDays(7)->toDateString(),
+                    'status' => $promoStatus,
+                    'note' => self::MARK.' სატესტო გეგმა',
+                ]);
+                $manifest['promos'][] = (int) $promo->id;
+
+                $collection = ErpCollection::query()->create([
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'amount' => 25 + $index,
+                    'method' => 'cash',
+                    'note' => self::MARK.' სატესტო ინკასაცია',
+                ]);
+                $manifest['collections'][] = (int) $collection->id;
+
+                $productReturn = ErpProductReturn::query()->create([
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'note' => self::MARK.' სატესტო დაბრუნება',
+                ]);
+                $productReturn->lines()->create([
+                    'item_id' => $item?->itemId ?? 'demo',
+                    'item_name' => $item?->name ?? 'სატესტო პროდუქტი',
+                    'quantity' => 1,
+                    'reason' => self::MARK.' ვადა',
+                ]);
+                $manifest['returns'][] = (int) $productReturn->id;
+
+                $price = (float) ($item ? $this->priceOf($item, $index) : '4.5000');
+                $order = ErpSavedOrder::query()->create([
+                    'user_id' => $rep->id,
+                    'id_gvari' => (int) $rep->id_gvari,
+                    'customer_id' => $customer->customerId,
+                    'customer_name' => $customer->name,
+                    'total' => round($price, 2),
+                    'note' => self::MARK.' სატესტო შეკვეთა',
+                ]);
+                $order->lines()->create([
+                    'item_id' => $item?->itemId ?? 'demo',
+                    'item_name' => $item?->name ?? 'სატესტო პროდუქტი',
+                    'pack_quantity' => 1,
+                    'pieces' => 1,
+                    'unit_price' => $price,
+                    'line_total' => round($price, 2),
+                ]);
+                $manifest['savedOrders'][] = (int) $order->id;
+            }
+
+            $this->info($rep->name.': '.$count.' of each operation.');
+        }
+
+        $this->writeManifest($manifest);
+        $this->comment('Demo rows carry the '.self::MARK.' prefix. The uploaded plan was not changed.');
 
         return self::SUCCESS;
     }
@@ -336,6 +579,33 @@ class FieldDemoCommand extends Command
             ->orWhereIn('visit_id', $guardVisits)
             ->delete();
 
+        $planograms = ErpPlanogramLine::query()
+            ->whereIn('id', $manifest['planograms'] ?: [-1])
+            ->delete();
+
+        $orderIds = ErpSavedOrder::query()
+            ->where('note', 'like', self::MARK.'%')
+            ->orWhereIn('id', $manifest['savedOrders'] ?: [-1])
+            ->pluck('id')
+            ->all();
+        ErpSavedOrder::query()
+            ->whereIn('id', $orderIds ?: [-1])
+            ->each(fn (ErpSavedOrder $order) => $order->lines()->delete());
+        $orders = ErpSavedOrder::query()->whereIn('id', $orderIds ?: [-1])->delete();
+
+        $collections = ErpCollection::query()
+            ->where('note', 'like', self::MARK.'%')
+            ->orWhereIn('id', $manifest['collections'] ?: [-1])
+            ->delete();
+
+        $returnIds = ErpProductReturn::query()
+            ->where('note', 'like', self::MARK.'%')
+            ->orWhereIn('id', $manifest['returns'] ?: [-1])
+            ->pluck('id')
+            ->all();
+        ErpProductReturnLine::query()->whereIn('erp_product_return_id', $returnIds ?: [-1])->delete();
+        $returns = ErpProductReturn::query()->whereIn('id', $returnIds ?: [-1])->delete();
+
         $files = 0;
         foreach ($photos as $photo) {
             if ($photo->path && Storage::disk('local')->exists($photo->path)) {
@@ -358,6 +628,10 @@ class FieldDemoCommand extends Command
                 ['erp_tasks', $tasks],
                 ['erp_shelf_audits', $audits],
                 ['erp_promo_plans', $promos],
+                ['erp_planogram_lines', $planograms],
+                ['erp_saved_orders', $orders],
+                ['erp_collections', $collections],
+                ['erp_product_returns', $returns],
                 ['photo files', $files],
             ],
         );
@@ -432,6 +706,109 @@ class FieldDemoCommand extends Command
         }
 
         return $customers[0];
+    }
+
+    /**
+     * @param  list<CustomerRecord>  $customers
+     * @param  list<ItemRecord>  $items
+     * @return list<int>
+     */
+    private function seedPlanograms(User $rep, array $customers, array $items): array
+    {
+        if ($items === [] || $customers === []) {
+            $this->warn($rep->name.': no FMG items, planogram skipped.');
+
+            return [];
+        }
+
+        $ids = [];
+        $slice = array_slice($items, 0, 6);
+        $facings = [2, 1, 3, 2, 1, 2];
+
+        foreach (array_slice($customers, 0, 2) as $customer) {
+            foreach ($slice as $index => $item) {
+                $row = ErpPlanogramLine::query()->create([
+                    'customer_id' => $customer->customerId,
+                    'shelf_no' => $index < 3 ? 1 : 2,
+                    'position' => ($index % 3) + 1,
+                    'item_id' => $item->itemId,
+                    'item_name' => $item->name,
+                    'facings' => $facings[$index] ?? 1,
+                    'target_price' => $this->priceOf($item, $index),
+                    'created_by' => $rep->id,
+                ]);
+                $ids[] = (int) $row->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<CustomerRecord>  $customers
+     * @param  list<ItemRecord>  $items
+     * @return list<int>
+     */
+    private function seedSavedOrders(User $rep, array $customers, array $items): array
+    {
+        if ($items === [] || $customers === []) {
+            $this->warn($rep->name.': no FMG items, saved orders skipped.');
+
+            return [];
+        }
+
+        $ids = [];
+        $packs = [
+            [2, 1, 3],
+            [1, 4],
+        ];
+
+        foreach ($packs as $orderIndex => $quantities) {
+            $customer = $customers[$orderIndex % count($customers)];
+            $lines = [];
+            $total = 0.0;
+
+            foreach ($quantities as $lineIndex => $qty) {
+                $item = $items[$lineIndex % count($items)];
+                $price = (float) $this->priceOf($item, $lineIndex + $orderIndex);
+                $lineTotal = round($qty * $price, 2);
+                $total += $lineTotal;
+                $lines[] = [
+                    'item_id' => $item->itemId,
+                    'item_name' => $item->name,
+                    'pack_quantity' => $qty,
+                    'pieces' => $qty,
+                    'unit_price' => $price,
+                    'line_total' => $lineTotal,
+                ];
+            }
+
+            $order = ErpSavedOrder::query()->create([
+                'user_id' => $rep->id,
+                'id_gvari' => (int) $rep->id_gvari,
+                'customer_id' => $customer->customerId,
+                'customer_name' => $customer->name,
+                'total' => round($total, 2),
+                'note' => self::MARK.' სატესტო შეკვეთა',
+            ]);
+            foreach ($lines as $line) {
+                $order->lines()->create($line);
+            }
+            $ids[] = (int) $order->id;
+        }
+
+        return $ids;
+    }
+
+    private function priceOf(ItemRecord $item, int $index): string
+    {
+        if ($item->unitPrice !== null && is_numeric($item->unitPrice) && (float) $item->unitPrice > 0) {
+            return number_format((float) $item->unitPrice, 4, '.', '');
+        }
+
+        $fallback = [4.5, 6.9, 3.2, 8.4, 2.8, 5.1, 7.3, 1.9];
+
+        return number_format($fallback[$index % count($fallback)], 4, '.', '');
     }
 
     private function storePhoto(
@@ -523,7 +900,7 @@ class FieldDemoCommand extends Command
     }
 
     /**
-     * @return array{visits: list<int>, photos: list<int>, surveys: list<int>, coaching: list<int>, tasks: list<int>, shelfAudits: list<int>, promos: list<int>}
+     * @return array{visits: list<int>, photos: list<int>, surveys: list<int>, coaching: list<int>, tasks: list<int>, shelfAudits: list<int>, promos: list<int>, planograms: list<int>, savedOrders: list<int>, collections: list<int>, returns: list<int>}
      */
     private function manifest(): array
     {
@@ -535,6 +912,10 @@ class FieldDemoCommand extends Command
             'tasks' => [],
             'shelfAudits' => [],
             'promos' => [],
+            'planograms' => [],
+            'savedOrders' => [],
+            'collections' => [],
+            'returns' => [],
         ];
 
         if (! Storage::disk('local')->exists(self::MANIFEST)) {

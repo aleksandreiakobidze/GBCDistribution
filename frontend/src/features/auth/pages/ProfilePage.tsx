@@ -18,6 +18,7 @@ export default function ProfilePage() {
     admin: 'Administrator',
     sales_rep: 'Sales Representative',
     supervisor: 'Supervisor',
+    manager: 'Manager',
     warehouse: 'Warehouse Staff',
     driver: 'Delivery Driver',
   };

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ka">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZZ — ტელეფონით შესვლა</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 40rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.6;
+        color: #0f172a;
+      }
+      h1 { font-size: 1.35rem; }
+      h2 { font-size: 1.05rem; margin-top: 1.75rem; }
+      a.btn {
+        display: inline-block;
+        margin: 0.5rem 0.5rem 0.5rem 0;
+        padding: 0.75rem 1rem;
+        background: #059669;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 0.5rem;
+        font-weight: 600;
+      }
+      a.btn.secondary { background: #0f172a; }
+      ol { padding-left: 1.25rem; }
+      code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 0.25rem; }
+      .note { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.75rem 1rem; border-radius: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>ტელეფონით ქსელიდან შესვლა</h1>
+    <p class="note">
+      ტელეფონი უნდა იყოს ოფისის Wi-Fi-ზე ან VPN-ზე. ჯერ გახსენი
+      <strong>http://192.168.0.22/zz</strong> (https კი არა). სერტიფიკატის შემდეგ
+      ბრაუზერი დახურე და თავიდან გახსენი.
+    </p>
+
+    <h2>სერტიფიკატი</h2>
+    <p><a class="btn" href="/zz-root.cer">სერტიფიკატის ჩამოტვირთვა</a></p>
+    <h2>Android</h2>
+    <ol>
+      <li>Settings → Security → Encryption and credentials</li>
+      <li><strong>Install a certificate</strong> → <strong>CA certificate</strong></li>
+    </ol>
+    <h2>iPhone</h2>
+    <ol>
+      <li>Safari-ით დააყენე პროფილი</li>
+      <li>Settings → General → About → Certificate Trust Settings და ჩართე ეს root CA</li>
+    </ol>
+    <p>ბრაუზერი დახურე და გახსენი:</p>
+    <p><a class="btn secondary" href="https://192.168.0.22:8443/">https://192.168.0.22:8443</a></p>
+    <p><code>https://192.168.0.22</code> პორტის გარეშე ძველი აპია. <code>https://zz.office.local</code> ტელეფონზე მუშაობს მხოლოდ მაშინ, თუ სახელი <code>192.168.0.22</code>-ზე იხსნება.</p>
+
+    <h2>Windows</h2>
+    <p>ჩამოტვირთე ფაილი და გაუშვი ორმაგი წკაპით. გამოჩნდება ნებართვის ფანჯარა — დააჭირე <strong>Yes</strong>. ამის გარეშე ბრაუზერი წერს Not secure და <code>https://zz.office.local</code> არ იხსნება.</p>
+    <p><a class="btn" href="/join-client.cmd">Windows-ის დაყენება</a></p>
+    <p>ბრაუზერი მთლიანად დახურე და გახსენი:</p>
+    <p><a class="btn secondary" href="https://zz.office.local/">https://zz.office.local</a></p>
+  </body>
+</html>

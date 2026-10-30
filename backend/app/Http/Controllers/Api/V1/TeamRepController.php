@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserRole;
+use App\Erp\Support\TeamAccess;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,9 +19,10 @@ class TeamRepController extends V1Controller
             ->where('is_active', true)
             ->orderBy('name');
 
-        if ($user->role === UserRole::Supervisor) {
-            $query->where('supervisor_id', $user->id);
-        } elseif ($user->role !== UserRole::Admin) {
+        if (TeamAccess::isTeamLead($user)) {
+            $ids = TeamAccess::salesUserIds($user) ?? [];
+            $query->whereIn('id', $ids === [] ? [-1] : $ids);
+        } elseif (TeamAccess::role($user) !== UserRole::Admin) {
             return $this->ok([]);
         }
 

@@ -10,6 +10,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -1807,9 +1808,17 @@ class V1ErpIsolationTest extends TestCase
 
     private function preseller(int $idGvari, array $extra = []): User
     {
-        return User::factory()->create(array_merge([
+        $user = User::factory()->create(array_merge([
             'role' => UserRole::SalesRep,
             'id_gvari' => $idGvari,
         ], $extra));
+        if (isset($extra['supervisor_id'])) {
+            DB::table('supervisor_sales')->insert([
+                'supervisor_user_id' => $extra['supervisor_id'],
+                'sales_user_id' => $user->id,
+            ]);
+        }
+
+        return $user;
     }
 }

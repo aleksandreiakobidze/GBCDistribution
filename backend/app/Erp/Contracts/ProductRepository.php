@@ -9,11 +9,14 @@ use App\Erp\Dto\PageResult;
 interface ProductRepository
 {
     /**
-     * @param  array{prodS?: ?string, prodT?: ?string}  $filters
+     * @param  array{prodS?: ?string, prodT?: ?string, mode?: 'sale'|'return'}  $filters
      */
     public function listForCustomer(int $idGvari, CustomerRecord $customer, ?string $search, ?string $cursor, int $limit, array $filters = []): PageResult;
 
-    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId): ItemRecord;
+    /**
+     * @param  array{mode?: 'sale'|'return'}  $filters
+     */
+    public function getForCustomer(int $idGvari, CustomerRecord $customer, string $itemId, array $filters = []): ItemRecord;
 
     /**
      * Pocket catalog without customer prices (Active + ShowInPocket).

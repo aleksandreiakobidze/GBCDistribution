@@ -57,7 +57,7 @@ export default function CustomerDetailPage() {
   const role = useAuthStore((s) => s.user?.role);
   const salesUserIdRaw = params.get('salesUserId');
   const salesUserId = salesUserIdRaw ? Number(salesUserIdRaw) : undefined;
-  const backTo = role === 'supervisor' ? '/routes' : '/customers';
+  const backTo = role === 'supervisor' || role === 'manager' ? '/routes' : '/customers';
   const isSales = role === 'sales_rep';
 
   const { data: customer, isLoading, isError, error } = useQuery({
@@ -132,17 +132,48 @@ export default function CustomerDetailPage() {
   const kegs = customer.kegs ?? [];
   const code = customer.orgCode || customer.customerId;
   const channel = displayText(customer.orgT);
+  const paymentDay = Number.isFinite(customer.paymentDay) ? Number(customer.paymentDay) : 0;
+  const valiLimitText =
+    customer.valiLimit != null && customer.valiLimit !== ''
+      ? formatCurrency(customer.valiLimit)
+      : null;
+  const monthLimitText =
+    customer.monthLimit != null && Number.isFinite(Number(customer.monthLimit))
+      ? String(customer.monthLimit)
+      : null;
   const facts = [
     { label: t('customers.orgT', 'Channel'), value: channel },
     { label: t('customers.sagad', 'Vatnumber'), value: displayText(customer.sagad) },
     { label: t('customers.qseli', 'Qseli'), value: displayText(customer.qseli) },
     { label: t('customers.orgCategory', 'OrgCategory'), value: displayText(customer.orgCategory) },
-  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
+    { label: t('customers.creditLimit', 'საკრედიტო ლიმიტი'), value: valiLimitText },
+    {
+      label: t('customers.paymentDay', 'გადახდის თარიღი'),
+      value: paymentDay === 0 ? t('customers.monthEnd', 'თვის ბოლო') : String(paymentDay),
+    },
+    { label: t('customers.monthLimit', 'თვის ლიმიტი'), value: monthLimitText },
+  ].filter((row): row is { label: string; value: string } => row.value != null && row.value !== '');
 
   const balanceNum =
     customer.balance != null && customer.balance !== '' ? Number(customer.balance) : null;
   const hasBalance = balanceNum != null && Number.isFinite(balanceNum);
   const debtTone = !hasBalance ? null : balanceNum > 0 ? 'debt' : balanceNum < 0 ? 'credit' : 'even';
+  const minOrder =
+    customer.minOrderTotal != null && customer.minOrderTotal !== ''
+      ? Number(customer.minOrderTotal)
+      : null;
+  const maxOrder =
+    customer.maxOrderTotal != null && customer.maxOrderTotal !== ''
+      ? Number(customer.maxOrderTotal)
+      : null;
+  const hasMinOrder = minOrder != null && Number.isFinite(minOrder) && minOrder > 0;
+  const hasMaxOrder = maxOrder != null && Number.isFinite(maxOrder) && maxOrder > 0;
+  const overdueNum =
+    customer.overdueBalance != null && customer.overdueBalance !== ''
+      ? Number(customer.overdueBalance)
+      : null;
+  const hasOverdue = overdueNum != null && Number.isFinite(overdueNum) && overdueNum > 0;
+  const moneyTiles = [hasBalance, hasMinOrder, hasMaxOrder, hasOverdue].filter(Boolean).length;
   const phone = displayText(customer.phone);
   const phoneHref = phone && /[\d+]/.test(phone) ? `tel:${phone.replace(/[^\d+]/g, '')}` : null;
 
@@ -173,9 +204,6 @@ export default function CustomerDetailPage() {
                 <span className="rounded-lg bg-[var(--color-surface-hover)] px-2 py-0.5 text-xs font-medium tabular-nums text-[var(--color-text-secondary)]">
                   {t('customers.orgCode', 'Code')} {code}
                 </span>
-                {channel ? (
-                  <Badge variant="info">{channel}</Badge>
-                ) : null}
               </div>
             </div>
             <Badge variant={customer.active ? 'success' : 'default'}>
@@ -203,6 +231,149 @@ export default function CustomerDetailPage() {
               </div>
             ) : null}
           </div>
+
+          {moneyTiles > 0 || kegs.length > 0 ? (
+            <div
+              className={cn(
+                'mt-4 grid gap-2',
+                moneyTiles + (kegs.length > 0 ? 1 : 0) > 1 ? 'sm:grid-cols-2' : '',
+                moneyTiles >= 3 ? 'lg:grid-cols-3' : '',
+                moneyTiles >= 4 ? 'xl:grid-cols-4' : '',
+              )}
+            >
+              {hasBalance ? (
+                <div
+                  className={cn(
+                    'rounded-2xl px-4 py-3',
+                    debtTone === 'debt' && 'bg-[var(--color-danger-light)]',
+                    debtTone === 'credit' && 'bg-[var(--color-success-light)]',
+                    debtTone === 'even' && 'bg-[var(--color-surface-hover)]',
+                  )}
+                >
+                  <p
+                    className={cn(
+                      'text-[11px] font-medium',
+                      debtTone === 'debt' && 'text-[var(--color-danger-fg)]',
+                      debtTone === 'credit' && 'text-[var(--color-success-fg)]',
+                      debtTone === 'even' && 'text-[var(--color-text-tertiary)]',
+                    )}
+                  >
+                    {t('customers.outstandingBalance', 'დავალიანება')}
+                  </p>
+                  <p
+                    className={cn(
+                      'mt-0.5 text-2xl font-bold tabular-nums tracking-tight',
+                      debtTone === 'debt' && 'text-[var(--color-danger-fg)]',
+                      debtTone === 'credit' && 'text-[var(--color-success-fg)]',
+                      debtTone === 'even' && 'text-[var(--color-text)]',
+                    )}
+                  >
+                    {formatCurrency(customer.balance)}
+                  </p>
+                </div>
+              ) : null}
+
+              {hasOverdue ? (
+                <div className="rounded-2xl bg-[var(--color-danger-light)] px-4 py-3">
+                  <p className="text-[11px] font-medium text-[var(--color-danger-fg)]">
+                    {t('customers.overdueBalance', 'ვადაგადაცილება')}
+                  </p>
+                  <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-[var(--color-danger-fg)]">
+                    {formatCurrency(customer.overdueBalance)}
+                  </p>
+                </div>
+              ) : null}
+
+              {hasMinOrder ? (
+                <div className="rounded-2xl bg-[var(--color-surface-hover)] px-4 py-3">
+                  <p className="text-[11px] font-medium text-[var(--color-text-tertiary)]">
+                    {t('customers.minOrderTotal', 'მინ. შეკვეთა')}
+                  </p>
+                  <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-[var(--color-text)]">
+                    {formatCurrency(customer.minOrderTotal)}
+                  </p>
+                </div>
+              ) : null}
+
+              {hasMaxOrder ? (
+                <div className="rounded-2xl bg-[var(--color-surface-hover)] px-4 py-3">
+                  <p className="text-[11px] font-medium text-[var(--color-text-tertiary)]">
+                    {t('customers.maxOrderTotal', 'მაქს. შეკვეთა')}
+                  </p>
+                  <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-[var(--color-text)]">
+                    {formatCurrency(customer.maxOrderTotal)}
+                  </p>
+                </div>
+              ) : null}
+
+              {kegs.length > 0 ? (
+                <div className="rounded-2xl bg-[var(--color-surface-hover)] px-4 py-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+                    <Package className="h-3.5 w-3.5" />
+                    {t('customers.kegs', 'Kegs')}
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {kegs.map((keg, index) => (
+                      <li
+                        key={`${keg.itemId}-${index}`}
+                        className="flex items-start justify-between gap-3 text-sm"
+                      >
+                        <span className="min-w-0 break-words text-[var(--color-text)]">
+                          {keg.name || keg.itemId}
+                        </span>
+                        <span className="shrink-0 font-semibold tabular-nums text-[var(--color-text)]">
+                          {formatKegQty(keg.quantity)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {hasOverdue ? (
+            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-light)] px-3 py-2.5">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-danger)]" />
+              <p className="text-sm font-semibold text-[var(--color-danger-fg)]">
+                {t('customers.overdueNotice', 'ვადაგადაცილებული დავალიანება: {{amount}}', {
+                  amount: formatCurrency(customer.overdueBalance),
+                })}
+              </p>
+            </div>
+          ) : null}
+
+          {facts.length > 0 ? (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {facts.map((row) => (
+                <Fact key={row.label} label={row.label} value={row.value} />
+              ))}
+            </div>
+          ) : null}
+
+          {schedule ? (
+            <div className="mt-3">
+              <h2 className="mb-2 text-sm font-semibold">{t('customers.visitSchedule', 'Visit schedule')}</h2>
+              <div className="flex flex-wrap gap-1.5">
+                {WEEKDAYS.map((day) => {
+                  const on = Boolean(schedule[day.key]);
+                  return (
+                    <span
+                      key={day.key}
+                      className={cn(
+                        'inline-flex h-8 min-w-9 items-center justify-center rounded-lg px-2 text-xs font-medium',
+                        on
+                          ? 'bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
+                          : 'bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)]',
+                      )}
+                    >
+                      {t(day.labelKey, day.fallback)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {pinned ? (
             <>
@@ -244,75 +415,10 @@ export default function CustomerDetailPage() {
               ) : null}
             </>
           ) : null}
-
-          {hasBalance || kegs.length > 0 ? (
-            <div
-              className={cn(
-                'mt-4 grid gap-2',
-                hasBalance && kegs.length > 0 ? 'sm:grid-cols-2' : '',
-              )}
-            >
-              {hasBalance ? (
-                <div
-                  className={cn(
-                    'rounded-2xl px-4 py-3',
-                    debtTone === 'debt' && 'bg-[var(--color-danger-light)]',
-                    debtTone === 'credit' && 'bg-[var(--color-success-light)]',
-                    debtTone === 'even' && 'bg-[var(--color-surface-hover)]',
-                  )}
-                >
-                  <p
-                    className={cn(
-                      'text-[11px] font-medium',
-                      debtTone === 'debt' && 'text-[var(--color-danger-fg)]',
-                      debtTone === 'credit' && 'text-[var(--color-success-fg)]',
-                      debtTone === 'even' && 'text-[var(--color-text-tertiary)]',
-                    )}
-                  >
-                    {t('customers.outstandingBalance', 'დავალიანება')}
-                  </p>
-                  <p
-                    className={cn(
-                      'mt-0.5 text-2xl font-bold tabular-nums tracking-tight',
-                      debtTone === 'debt' && 'text-[var(--color-danger-fg)]',
-                      debtTone === 'credit' && 'text-[var(--color-success-fg)]',
-                      debtTone === 'even' && 'text-[var(--color-text)]',
-                    )}
-                  >
-                    {formatCurrency(customer.balance)}
-                  </p>
-                </div>
-              ) : null}
-
-              {kegs.length > 0 ? (
-                <div className="rounded-2xl bg-[var(--color-surface-hover)] px-4 py-3">
-                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
-                    <Package className="h-3.5 w-3.5" />
-                    {t('customers.kegs', 'Kegs')}
-                  </p>
-                  <ul className="mt-2 space-y-1.5">
-                    {kegs.map((keg, index) => (
-                      <li
-                        key={`${keg.itemId}-${index}`}
-                        className="flex items-start justify-between gap-3 text-sm"
-                      >
-                        <span className="min-w-0 break-words text-[var(--color-text)]">
-                          {keg.name || keg.itemId}
-                        </span>
-                        <span className="shrink-0 font-semibold tabular-nums text-[var(--color-text)]">
-                          {formatKegQty(keg.quantity)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         {isSales ? <VisitActions customerId={customer.customerId} /> : null}
-        {!isSales && (role === 'supervisor' || role === 'admin') ? (
+        {!isSales && (role === 'supervisor' || role === 'manager' || role === 'admin') ? (
           <div className="px-4 py-3 sm:px-5">
             <PlanogramEditor
               customerId={customer.customerId}
@@ -367,40 +473,6 @@ export default function CustomerDetailPage() {
             </Button>
           </div>
         )}
-
-        <div className="flex flex-col gap-5 px-4 py-4 sm:px-5">
-          {facts.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
-              {facts.map((row) => (
-                <Fact key={row.label} label={row.label} value={row.value} />
-              ))}
-            </div>
-          ) : null}
-
-          {schedule && (
-            <div>
-              <h2 className="mb-2 text-sm font-semibold">{t('customers.visitSchedule', 'Visit schedule')}</h2>
-              <div className="flex flex-wrap gap-1.5">
-                {WEEKDAYS.map((day) => {
-                  const on = Boolean(schedule[day.key]);
-                  return (
-                    <span
-                      key={day.key}
-                      className={cn(
-                        'inline-flex h-8 min-w-9 items-center justify-center rounded-lg px-2 text-xs font-medium',
-                        on
-                          ? 'bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
-                          : 'bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)]',
-                      )}
-                    >
-                      {t(day.labelKey, day.fallback)}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
       </Card>
     </div>
   );

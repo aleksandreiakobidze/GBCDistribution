@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { Lock, AlertCircle, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '@/components/ui';
 import { loginSchema, type LoginFormData } from '@/lib/utils/validators';
@@ -36,13 +36,13 @@ export function LoginForm() {
       )}
 
       <Input
-        label={t('auth.email', 'Email')}
-        placeholder="nino@bsc.ge"
-        autoComplete="email"
-        leftIcon={<Mail className="h-4 w-4" />}
+        label={t('auth.email', 'სახელი და გვარი')}
+        placeholder="ნიკა რუსიშვილი"
+        autoComplete="username"
+        leftIcon={<UserRound className="h-4 w-4" />}
         error={errors.email?.message}
         {...register('email')}
-        type="email"
+        type="text"
       />
 
       <Input
@@ -57,7 +57,7 @@ export function LoginForm() {
       <p className="text-xs text-[var(--color-text-tertiary)]">
         {t(
           'auth.presellerHint',
-          'პრისელერი: nino@bsc.ge — პაროლი არის სიტყვა password (8 ასო), არა წერტილები და არა FMG/Pocket პაროლი.',
+          'სეილსმენი წერს თავის სახელს და გვარს. პაროლი Beer1. ადმინი ისევ ელფოსტით შედის.',
         )}
       </p>
 

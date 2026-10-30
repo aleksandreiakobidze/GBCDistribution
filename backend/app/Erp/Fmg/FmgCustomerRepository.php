@@ -11,6 +11,7 @@ use App\Erp\Exceptions\ErpException;
 use App\Erp\Support\Decimal;
 use App\Erp\Support\OrderLimit;
 use App\Erp\Support\VisitDay;
+use Carbon\Carbon;
 
 final class FmgCustomerRepository implements CustomerRepository
 {
@@ -73,7 +74,7 @@ SQL;
 
         $pageSql = "SELECT TOP {$limitPlus}
     o.IdOrg, {$text},
-    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory,
+    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory, o.IdOrgCompanyCategory,
     o.Lat, o.Lon, o.UseProdList, o.OrgShowPocket, o.Active,
     ot.CanRealHalfComp,
     {$scheduleCols}
@@ -131,8 +132,9 @@ SQL;
         $sql = <<<SQL
 SELECT
     o.IdOrg, {$text},
-    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory,
+    o.FG, o.IdQseli, o.IdOrgT, o.IdReg, o.IdOrgCategory, o.IdOrgCompanyCategory,
     o.Lat, o.Lon, o.UseProdList, o.OrgShowPocket, o.Active,
+    o.PaymentDay, o.ValiLimit, o.[Limit],
     ot.CanRealHalfComp,
     svb.MinReal, svb.MaxReal,
     {$scheduleCols}
@@ -180,7 +182,16 @@ SQL;
             throw new ErpException('CUSTOMER_NOT_FOUND', 'მომხმარებელი ვერ მოიძებნა.', 404);
         }
 
-        return $this->map($row, $this->kegsFor((int) $customerId), $this->balanceFor((int) $customerId));
+        $idOrg = (int) $customerId;
+        $balance = $this->balanceFor($idOrg);
+        $overdue = $this->overdueBalanceFor(
+            $idOrg,
+            (int) ($row['PaymentDay'] ?? 0),
+            $row['ValiLimit'] ?? null,
+            $balance,
+        );
+
+        return $this->map($row, $this->kegsFor($idOrg), $balance, $overdue);
     }
 
     public function isAssigned(int $idGvari, string $customerId): bool
@@ -253,7 +264,7 @@ SQL;
      * @param  array<string, mixed>  $row
      * @param  list<KegPocketRecord>  $kegs
      */
-    private function map(array $row, array $kegs = [], ?string $balance = null): CustomerRecord
+    private function map(array $row, array $kegs = [], ?string $balance = null, ?string $overdueBalance = null): CustomerRecord
     {
         return new CustomerRecord(
             customerId: (string) $row['IdOrg'],
@@ -271,6 +282,7 @@ SQL;
             idReg: (int) ($row['IdReg'] ?? 0),
             idOrgCategory: (int) ($row['IdOrgCategory'] ?? 0),
             orgCategory: FmgNvarchar::decodeNullable($row['OrgCategory'] ?? null),
+            idOrgCompanyCategory: (int) ($row['IdOrgCompanyCategory'] ?? 0),
             latitude: isset($row['Lat']) ? (string) $row['Lat'] : null,
             longitude: isset($row['Lon']) ? (string) $row['Lon'] : null,
             useProdList: $this->isActive($row['UseProdList'] ?? false),
@@ -282,7 +294,26 @@ SQL;
             canRealHalfComp: $this->isActive($row['CanRealHalfComp'] ?? false),
             minOrderTotal: OrderLimit::normalize($row['MinReal'] ?? null),
             maxOrderTotal: OrderLimit::normalize($row['MaxReal'] ?? null),
+            overdueBalance: $overdueBalance,
+            valiLimit: $this->moneyOrNull($row['ValiLimit'] ?? null),
+            paymentDay: (int) ($row['PaymentDay'] ?? 0),
+            monthLimit: array_key_exists('Limit', $row) && $row['Limit'] !== null && $row['Limit'] !== ''
+                ? (int) $row['Limit']
+                : null,
         );
+    }
+
+    private function moneyOrNull(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            return Decimal::normalize((string) $value, 4);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
     }
 
     /**
@@ -352,6 +383,75 @@ SQL;
         } catch (\InvalidArgumentException) {
             return null;
         }
+    }
+
+    /**
+     * AmountOfCustomerPocket has no date column, so debt as of cutoff is rebuilt from
+     * today's pocket minus sales after cutoff plus returns/payments after cutoff.
+     * overdue = debtAsOf - returns - payments - ValiLimit.
+     */
+    private function overdueBalanceFor(int $idOrg, int $paymentDay, mixed $valiLimit, ?string $balance): ?string
+    {
+        $today = Carbon::now('Asia/Tbilisi')->startOfDay();
+        if ($today->day > $paymentDay) {
+            $cutoff = $today->copy()->subMonthNoOverflow()->endOfMonth()->startOfDay();
+        } else {
+            $cutoff = $today->copy()->subMonthsNoOverflow(2)->endOfMonth()->startOfDay();
+        }
+
+        $balanceNum = $balance === null || $balance === '' ? 0.0 : (float) $balance;
+        $sales = $this->sumTanxaAfter('dbo.PowerBiReal', $idOrg, $cutoff, $today);
+        $returns = $this->sumTanxaAfter('dbo.PowerBiDabr', $idOrg, $cutoff, $today);
+        $payments = $this->sumTanxaAfter('dbo.PowerBiSal', $idOrg, $cutoff, $today);
+        $limit = 0.0;
+        if ($valiLimit !== null && $valiLimit !== '') {
+            try {
+                $limit = (float) Decimal::normalize((string) $valiLimit, 4);
+            } catch (\InvalidArgumentException) {
+                $limit = 0.0;
+            }
+        }
+
+        $debtAsOf = $balanceNum - $sales + $returns + $payments;
+        $overdue = $debtAsOf - $returns - $payments - $limit;
+        if ($overdue <= 0) {
+            return null;
+        }
+
+        try {
+            return Decimal::normalize((string) $overdue, 4);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    private function sumTanxaAfter(string $table, int $idOrg, Carbon $cutoff, Carbon $today): float
+    {
+        $from = $cutoff->copy()->addDay()->startOfDay()->format('Y-m-d H:i:s');
+        $toExclusive = $today->copy()->addDay()->startOfDay()->format('Y-m-d H:i:s');
+
+        try {
+            $rows = $this->fmg->connection()->select(
+                'SELECT SUM(CAST(t.Tanxa AS decimal(18, 4))) AS Tanxa '
+                .'FROM '.$table.' AS t '
+                .'WHERE t.IdOrg = :idOrg '
+                .'AND t.Data >= :fromData AND t.Data < :toData',
+                [
+                    'idOrg' => $idOrg,
+                    'fromData' => $from,
+                    'toData' => $toExclusive,
+                ],
+            );
+        } catch (\Throwable) {
+            throw new ErpException('SOURCE_UNAVAILABLE', 'FMG ბაზა ამჟამად მიუწვდომელია.', 503);
+        }
+
+        $tanxa = ((array) ($rows[0] ?? []))['Tanxa'] ?? null;
+        if ($tanxa === null || $tanxa === '') {
+            return 0.0;
+        }
+
+        return (float) $tanxa;
     }
 
     /**

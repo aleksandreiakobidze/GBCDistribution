@@ -24,9 +24,14 @@ use App\Http\Controllers\Api\V1\VisitPhotoController as V1VisitPhotoController;
 use App\Http\Controllers\Api\V1\GalleryPhotoController as V1GalleryPhotoController;
 use App\Http\Controllers\Api\V1\FieldWorkController as V1FieldWorkController;
 use App\Http\Controllers\Api\V1\ProductReturnController as V1ProductReturnController;
+use App\Http\Controllers\Api\V1\WarehouseController as V1WarehouseController;
 use App\Http\Controllers\Api\V1\SavedOrderController as V1SavedOrderController;
 use App\Http\Controllers\Api\V1\PromotionController as V1PromotionController;
 use App\Http\Controllers\Api\V1\PriceListController as V1PriceListController;
+use App\Http\Controllers\Api\V1\FieldSettingsController as V1FieldSettingsController;
+use App\Http\Controllers\Api\V1\AdminDirectoryController as V1AdminDirectoryController;
+use App\Http\Controllers\Api\V1\PlanController as V1PlanController;
+use App\Http\Controllers\Api\V1\MonitoringController as V1MonitoringController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -113,6 +118,24 @@ Route::prefix('v1')->group(function () {
         Route::get('/dashboard', [V1FieldWorkController::class, 'dashboard']);
         Route::get('/my-reports', [V1FieldWorkController::class, 'myReports']);
         Route::get('/health/diagnostics', [V1HealthController::class, 'diagnostics']);
+        Route::get('/field-settings', [V1FieldSettingsController::class, 'show']);
+        Route::put('/field-settings', [V1FieldSettingsController::class, 'update']);
+        Route::get('/admin/users', [V1AdminDirectoryController::class, 'users']);
+        Route::post('/admin/users', [V1AdminDirectoryController::class, 'storeUser']);
+        Route::patch('/admin/users/{id}', [V1AdminDirectoryController::class, 'updateUser'])->whereNumber('id');
+        Route::get('/admin/roles', [V1AdminDirectoryController::class, 'roles']);
+        Route::post('/admin/roles', [V1AdminDirectoryController::class, 'storeRole']);
+        Route::get('/admin/roles/{role}/menus', [V1AdminDirectoryController::class, 'roleMenus'])->where('role', '[^/]+');
+        Route::put('/admin/roles/{role}/menus', [V1AdminDirectoryController::class, 'updateRoleMenus'])->where('role', '[^/]+');
+        Route::get('/monitoring/reps', [V1MonitoringController::class, 'reps']);
+        Route::get('/monitoring/orgs', [V1MonitoringController::class, 'orgs']);
+        Route::get('/monitoring/orgs/card', [V1MonitoringController::class, 'card']);
+        Route::get('/monitoring/orders', [V1MonitoringController::class, 'orders']);
+        Route::post('/monitoring/orders', [V1MonitoringController::class, 'storeOrder']);
+        Route::get('/monitoring/orders/{id}', [V1MonitoringController::class, 'order'])->whereNumber('id');
+        Route::get('/plans', [V1PlanController::class, 'show']);
+        Route::post('/plans', [V1PlanController::class, 'store']);
+        Route::post('/plans/refresh', [V1PlanController::class, 'refresh']);
         Route::get('/price-list', [V1PriceListController::class, 'meta']);
         Route::get('/price-list/file', [V1PriceListController::class, 'file']);
 
@@ -142,6 +165,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/collections', [V1CollectionController::class, 'store']);
             Route::get('/collections/{id}', [V1CollectionController::class, 'show']);
             Route::patch('/collections/{id}', [V1CollectionController::class, 'update']);
+            Route::get('/warehouses', [V1WarehouseController::class, 'index']);
             Route::get('/product-returns', [V1ProductReturnController::class, 'index']);
             Route::post('/product-returns', [V1ProductReturnController::class, 'store']);
             Route::get('/product-returns/{id}', [V1ProductReturnController::class, 'show']);

@@ -8,7 +8,17 @@ import { formatVisitClock } from '@/lib/utils/format';
 import { Button, Card, Input, SegmentedControl, StarRating } from '@/components/ui';
 import { ShelfStudio } from '@/features/shelf/ShelfStudio';
 import { cn } from '@/lib/utils/cn';
-import type { ErpVisitPhoto } from '@/types';
+import type { ErpVisitPhoto, FieldRules } from '@/types';
+
+const openRules: FieldRules = {
+  requirePhotoBefore: false,
+  requirePhotoEnd: false,
+  requirePhotoShelf: false,
+  requireSurvey: false,
+  requireShelfAudit: false,
+  requireGps: false,
+  missedSkipsRules: true,
+};
 
 async function readPosition(): Promise<{ latitude: string; longitude: string } | null> {
   if (!navigator.geolocation) {
@@ -155,6 +165,18 @@ export function VisitActions({ customerId }: { customerId: string }) {
     retry: false,
   });
 
+  const meQuery = useQuery({
+    queryKey: ['erp-me'],
+    queryFn: () => erpApi.me(),
+    retry: false,
+  });
+
+  const surveysQuery = useQuery({
+    queryKey: ['erp-surveys', customerId],
+    queryFn: () => erpApi.visitSurveys(customerId),
+    retry: false,
+  });
+
   const shelfQuery = useQuery({
     queryKey: ['erp-shelf', customerId],
     queryFn: () => erpApi.shelfAudits(customerId),
@@ -196,6 +218,9 @@ export function VisitActions({ customerId }: { customerId: string }) {
     mutationFn: async () => {
       const position = await readPosition();
       setGpsMissing(position == null);
+      if ((meQuery.data?.fieldRules ?? openRules).requireGps && position == null) {
+        throw new Error('gps');
+      }
       return erpApi.startVisit({ customerId, ...position });
     },
     onSuccess: async () => {
@@ -203,7 +228,11 @@ export function VisitActions({ customerId }: { customerId: string }) {
       await refresh();
     },
     onError: (error) => {
-      setActionError(apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.'));
+      setActionError(
+        error instanceof Error && error.message === 'gps'
+          ? t('customers.gpsRequired', 'GPS აუცილებელია.')
+          : (apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.')),
+      );
     },
   });
 
@@ -215,6 +244,11 @@ export function VisitActions({ customerId }: { customerId: string }) {
       }
       const position = await readPosition();
       setGpsMissing(position == null);
+      const rules = meQuery.data?.fieldRules ?? openRules;
+      const skips = outcome === 'missed' && rules.missedSkipsRules;
+      if (!skips && rules.requireGps && position == null) {
+        throw new Error('gps');
+      }
       return erpApi.finishVisit(open.id, { outcome, ...position });
     },
     onSuccess: async () => {
@@ -222,7 +256,11 @@ export function VisitActions({ customerId }: { customerId: string }) {
       await refresh();
     },
     onError: (error) => {
-      setActionError(apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.'));
+      setActionError(
+        error instanceof Error && error.message === 'gps'
+          ? t('customers.gpsRequired', 'GPS აუცილებელია.')
+          : (apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.')),
+      );
     },
   });
 
@@ -264,9 +302,10 @@ export function VisitActions({ customerId }: { customerId: string }) {
 
   const surveyMutation = useMutation({
     mutationFn: (visitId: number) => erpApi.saveVisitSurvey({ visitId, ...answers }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setActionError(null);
       setSurveySaved(true);
+      await queryClient.invalidateQueries({ queryKey: ['erp-surveys', customerId] });
     },
     onError: (error) => {
       setActionError(apiMessage(error) ?? t('customers.loadError', 'კლიენტები ვერ ჩაიტვირთა.'));
@@ -284,9 +323,28 @@ export function VisitActions({ customerId }: { customerId: string }) {
   );
   const coaching = coachingQuery.data ?? [];
   const latestShelf = shelfQuery.data?.[0];
-  const surveyVisit = openHere ?? (latestFinished && isTodayInTbilisi(latestFinished.startedAt) ? latestFinished : null);
-  const started = formatVisitClock(openHere?.startedAt ?? null);
   const todayPhotos = photos.filter((photo) => isTodayInTbilisi(photo.takenAt));
+  const rules = meQuery.data?.fieldRules ?? openRules;
+  const surveyVisit = openHere ?? (latestFinished && isTodayInTbilisi(latestFinished.startedAt) ? latestFinished : null);
+  const surveyDone =
+    surveySaved || (surveysQuery.data ?? []).some((row) => surveyVisit != null && row.visitId === surveyVisit.id);
+  const shelfDone = Boolean(latestShelf && isTodayInTbilisi(latestShelf.createdAt));
+  const arrivedGaps = openHere
+    ? [
+        rules.requirePhotoBefore && !todayPhotos.some((photo) => photo.phase === 'before')
+          ? t('customers.photoBefore', 'ვიზიტამდე ფოტო')
+          : null,
+        rules.requirePhotoEnd && !todayPhotos.some((photo) => photo.phase === 'end')
+          ? t('customers.photoEnd', 'დასრულების ფოტო')
+          : null,
+        rules.requirePhotoShelf && !todayPhotos.some((photo) => photo.phase === 'shelf')
+          ? t('customers.photoShelf', 'თაროს ფოტო')
+          : null,
+        rules.requireSurvey && !surveyDone ? t('survey.title', 'გამოკითხვა') : null,
+        rules.requireShelfAudit && !shelfDone ? t('shelf.title', 'თაროს აუდიტი') : null,
+      ].filter((item): item is string => item != null)
+    : [];
+  const started = formatVisitClock(openHere?.startedAt ?? null);
 
   const onFile = (phase: ErpVisitPhoto['phase'], list: FileList | null) => {
     const file = list?.[0];
@@ -336,7 +394,12 @@ export function VisitActions({ customerId }: { customerId: string }) {
       >
         {openHere ? (
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="primary" size="lg" disabled={busy} onClick={() => finishMutation.mutate('arrived')}>
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={busy || arrivedGaps.length > 0}
+              onClick={() => finishMutation.mutate('arrived')}
+            >
               <MapPin className="h-4 w-4" />
               {t('customers.arrived', 'Arrived')}
             </Button>
@@ -344,7 +407,13 @@ export function VisitActions({ customerId }: { customerId: string }) {
               {t('customers.missed', 'Could not enter')}
             </Button>
           </div>
-        ) : (
+        ) : null}
+        {openHere && arrivedGaps.length > 0 ? (
+          <p className="text-sm font-medium text-[var(--color-warning)]">
+            {t('customers.rulesMissing', 'აუცილებელია')}: {arrivedGaps.join(', ')}
+          </p>
+        ) : null}
+        {!openHere ? (
           <Button
             variant="primary"
             size="lg"
@@ -354,7 +423,7 @@ export function VisitActions({ customerId }: { customerId: string }) {
           >
             {t('customers.startVisit', 'Start visit')}
           </Button>
-        )}
+        ) : null}
         {coaching.length > 0 ? (
           <div className="space-y-1 rounded-xl bg-[var(--color-surface-hover)] p-2.5">
             <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
@@ -455,7 +524,7 @@ export function VisitActions({ customerId }: { customerId: string }) {
         title={t('survey.title', 'Survey')}
         hint={surveyVisit ? undefined : t('customers.startVisit', 'Start visit')}
         icon={<ClipboardList className="h-4 w-4" />}
-        done={surveySaved}
+        done={surveyDone}
       >
         {(
           [
@@ -496,7 +565,7 @@ export function VisitActions({ customerId }: { customerId: string }) {
         step={4}
         title={t('shelf.title', 'Shelf audit')}
         icon={<PackageSearch className="h-4 w-4" />}
-        done={Boolean(latestShelf && isTodayInTbilisi(latestShelf.createdAt))}
+        done={shelfDone}
       >
         <Button variant="primary" size="sm" fullWidth onClick={() => setStudioOpen(true)}>
           {t('shelf.open', 'Shelf studio')}
